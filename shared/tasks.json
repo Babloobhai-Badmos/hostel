@@ -1,0 +1,11 @@
+[
+  { "id": "water", "name": "Fill the water bottle", "room": "F2:Washroom", "type": "hold" },
+  { "id": "charge", "name": "Charge your phone", "room": "F2:Lounge", "type": "pattern" },
+  { "id": "chai", "name": "Carry chai", "room": "F3:Terrace", "type": "carry" },
+  { "id": "knock", "name": "Knock on 303", "room": "F2:303", "type": "rhythm" },
+  { "id": "measure", "name": "Measure the corridor", "room": "F2:Corridor", "type": "walk-markers" },
+  { "id": "paint", "name": "Paint the wall", "room": "F3:421", "type": "scribble" },
+  { "id": "demon", "name": "Fight the ghost-demon", "room": "F2:309", "type": "mash" },
+  { "id": "laddu", "name": "Eat the laddus", "room": "F2:310", "type": "tap-fast" },
+  { "id": "surgery", "name": "Teddy bear surgery", "room": "F2:311", "type": "tweezers" }
+]

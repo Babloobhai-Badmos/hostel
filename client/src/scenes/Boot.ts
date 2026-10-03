@@ -1,8 +1,10 @@
 import Phaser from "phaser";
 import { createPlaceholderTextures } from "../render/placeholderSprites";
+import { bakeFloorTextures } from "../render/mapRenderer";
+import { hostelMap } from "../../../shared/world";
 import { net } from "../net";
 
-/** Generates placeholder art, then resumes a previous session or shows the lobby. */
+/** Generates placeholder art and the floor textures, then resumes a previous session or shows the lobby. */
 export class BootScene extends Phaser.Scene {
   constructor() {
     super("Boot");
@@ -10,6 +12,7 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     createPlaceholderTextures(this);
+    bakeFloorTextures(this, hostelMap);
     this.add
       .text(this.scale.width / 2, this.scale.height / 2, "Loading…", {
         fontFamily: "system-ui, sans-serif",

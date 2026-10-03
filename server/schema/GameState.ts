@@ -11,6 +11,12 @@ export class Player extends Schema {
   @type("string") name = "";
   @type("float32") x = 0;
   @type("float32") y = 0;
+  /** Which floor the player is on (layout.json floor id). */
+  @type("uint8") floor = 0;
+  /** Inside a hiding spot: invisible to others and can't move. */
+  @type("boolean") hidden = false;
+  /** Bumped on every teleport (stairs, vents, respawn) so clients snap instead of sliding. */
+  @type("uint8") tp = 0;
   /** Index into PLAYER_COLORS. */
   @type("uint8") color = 0;
   @type("boolean") connected = true;

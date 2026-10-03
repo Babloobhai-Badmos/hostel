@@ -2,7 +2,7 @@
 
 A chaotic multiplayer top-down browser game for 1–20 friends on the same WiFi or hotspot. One laptop runs the server; everyone else opens a URL in their phone or laptop browser. Nothing to install on the phones.
 
-**Current status: Phase 1 (scaffold and sync).** You get a lobby with name entry, a host START button, and players moving around a test room, synced across devices.
+**Current status: Phase 2 (the map).** Lobby with name entry and a host START button, then two hostel floors generated from `shared/layout.json`: rooms, corridors, doors, furniture, ~100 hiding spots, stairs between floors, vents and task stations (vents and tasks become usable in later phases).
 
 ## Requirements
 
@@ -59,17 +59,40 @@ cloudflared tunnel --url http://localhost:3000
 
 It prints an `https://<random-words>.trycloudflare.com` URL. Send that to everyone. The URL changes every time you restart cloudflared.
 
-## Testing from your phone (Phase 1)
+## Controls
+
+| | Phone | Laptop |
+| --- | --- | --- |
+| Move | Left thumb anywhere on the left half (floating joystick) | WASD / arrow keys |
+| Use (stairs, hide, climb out) | USE button (lights up and relabels when something is in reach) | E |
+| Look at the other floor's map | Tap the minimap | M |
+
+- **Stairs:** walk onto the yellow-striped stairs and press USE to go to the matching stairs on the other floor. You only see players on your own floor.
+- **Hiding spots:** anything with a **dotted yellow outline** (cupboards, lockers, under beds, curtains, behind water tanks, between bookshelves...). Stand next to it and press USE. While hidden, nobody else can see you and you can't move. USE again to climb out. One person per spot.
+
+## The map
+
+Everything comes from `shared/layout.json` (rooms, doors, stairs, vents, spawn, furniture per room type) and `shared/tasks.json` (task stations). No art files.
+
+- Rename a room: change its `label`. Move or resize a room: change `x`, `y` (and `w`, `h`). The file starts with a `_help` section explaining every field.
+- Check a change without starting the game:
+
+  ```bash
+  npm run map
+  ```
+
+  This validates the layout (overlaps, doors that lead into walls, unreachable rooms, corridors not 3 wide...) and prints both floors as ASCII. Restart `npm start` afterwards to see it in game.
+
+## Testing from your phone
 
 1. Run `npm start` on the laptop. Note the LAN URL.
 2. On the laptop, open `http://localhost:3000`, type a name and press **Join**. You're the host (👑).
 3. On your phone, open the LAN URL (for example `http://192.168.1.42:3000`), turn it sideways, type a name and tap **Join**. Both devices now list both players.
-4. On the laptop, press **START**. Both devices switch to the test room.
-5. Move:
-   - **Phone:** put your left thumb anywhere on the left half of the screen and drag. The joystick appears where your thumb lands. The ATTACK / USE / ABILITY buttons on the right stay grayed out until later phases.
-   - **Laptop:** WASD or the arrow keys.
-6. Each device should see the other moving smoothly. The yellow name is you.
-7. Reconnect test: lock the phone or reload the page, then come back within 30 seconds. You get your slot back (other players see you as "(offline)" in the meantime).
+4. On the laptop, press **START**. Everyone appears in the Floor 2 Washroom.
+5. Walk around (see Controls above). Each device should see the other moving smoothly. The yellow name is you.
+6. Walk out of the Washroom's north door, go left along the North Corridor and up into **Stair W**. Press USE: you're now on Floor 3, and the other device no longer sees you.
+7. Stand next to a locker (dotted yellow outline) and press USE to hide.
+8. Reconnect test: lock the phone or reload the page, then come back within 30 seconds. You get your slot back (other players see you as "(offline)" in the meantime).
 
 The first tap on a phone puts the page into fullscreen landscape on Android. **iPhones don't support the fullscreen API**. For a full-screen experience there, tap *Share → Add to Home Screen* and open the game from the new icon.
 
@@ -92,6 +115,7 @@ It prints server update rate (should stay ~20/s) and the worst gap between updat
 | `npm run serve` | Start the server without rebuilding the client |
 | `npm run build` | Build the client into `dist/client` |
 | `npm run typecheck` | TypeScript strict check of everything |
+| `npm run map` | Validate `layout.json` and print both floors as ASCII |
 | `npm run tunnel` | Print tunnel fallback instructions |
 | `npm run sim -- [count] [seconds] [url]` | Headless bot load test |
 
@@ -99,7 +123,7 @@ Use another port with `PORT=3001 npm start` (on Windows PowerShell: `$env:PORT=3
 
 ## How it's put together
 
-- `shared/`: constants (every tunable number), message types, and the movement and collision code that both the server and the client run.
+- `shared/`: constants (every tunable number), message types, the data files (`layout.json`, `tasks.json`, `characters.json`), the map builder (`buildMap.ts`) and the movement/collision code. Server and client both run this code, so they always agree on where the walls are.
 - `server/`: Express serves the built client. Colyseus runs the `hostel` room at 20 ticks/second. `rooms/HostelRoom.ts` only orchestrates. Rules live in `systems/`.
 - `client/`: Phaser 3 + Vite. Scenes: Boot → Lobby → Game + HUD.
 

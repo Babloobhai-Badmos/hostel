@@ -6,7 +6,8 @@
 //
 // Right side: three big round buttons, ATTACK, USE, ABILITY. Each one can be
 // enabled/disabled (grayed out) and shows a cooldown ring (0 = ready, 1 =
-// just used). Phase 1 keeps them all disabled.
+// just used). USE lights up and relabels itself when something is in reach
+// (stairs, a hiding spot); ATTACK and ABILITY arrive in later phases.
 
 import Phaser from "phaser";
 import {
@@ -106,6 +107,12 @@ export class TouchControls {
     const b = this.find(name);
     b.enabled = enabled;
     if (!enabled) b.held = false;
+  }
+
+  /** Change a button's caption (e.g. USE -> STAIRS / HIDE / EXIT). */
+  setLabel(name: ActionName, text: string): void {
+    const b = this.find(name);
+    if (b.text.text !== text) b.text.setText(text);
   }
 
   /** 0 = ready, 1 = full cooldown remaining. */

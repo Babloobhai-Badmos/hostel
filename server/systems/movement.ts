@@ -25,7 +25,8 @@ interface MoveRuntime {
 export class MovementSystem {
   private runtimes = new Map<string, MoveRuntime>();
 
-  constructor(private grid: CollisionGrid) {}
+  /** One collision grid per floor id. */
+  constructor(private grids: Map<number, CollisionGrid>) {}
 
   addPlayer(id: string): void {
     this.runtimes.set(id, { queue: [], budget: 0, lastSeq: 0 });
@@ -53,18 +54,25 @@ export class MovementSystem {
     if (rt) rt.queue.length = 0;
   }
 
-  /** Apply queued inputs to one player for this tick. */
-  tick(player: Player, speedMultiplier = 1): void {
+  /**
+   * Apply queued inputs to one player for this tick. A player who can't move
+   * (hidden, later: stunned) still has inputs acknowledged so the client's
+   * prediction doesn't pile them up.
+   */
+  tick(player: Player, canMove: boolean, speedMultiplier = 1): void {
     const rt = this.runtimes.get(player.id);
-    if (!rt) return;
+    const grid = this.grids.get(player.floor);
+    if (!rt || !grid) return;
     rt.budget = Math.min(INPUT_BUDGET_MAX, rt.budget + 1);
     const speed = BASE_SPEED_PX_PER_SEC * speedMultiplier;
     while (rt.budget >= 1 && rt.queue.length > 0) {
       const input = rt.queue.shift()!;
       rt.budget -= 1;
-      const next = stepMovement(this.grid, player, input.dir, speed, TICK_DT, PLAYER_RADIUS_PX);
-      player.x = next.x;
-      player.y = next.y;
+      if (canMove) {
+        const next = stepMovement(grid, player, input.dir, speed, TICK_DT, PLAYER_RADIUS_PX);
+        player.x = next.x;
+        player.y = next.y;
+      }
       player.ack = input.seq;
     }
   }

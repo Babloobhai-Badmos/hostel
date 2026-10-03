@@ -43,14 +43,11 @@ export function pickSpawn(state: GameState, spawns: Vec2[]): Vec2 {
   return spawns.find((s) => !occupied(s)) ?? spawns[state.players.size % spawns.length];
 }
 
-/** Put every player back on the spawn grid in join order. */
-export function placeAllOnSpawns(state: GameState, spawns: Vec2[]): void {
-  let i = 0;
-  state.players.forEach((p: Player) => {
-    const s = spawns[i++ % spawns.length];
-    p.x = s.x;
-    p.y = s.y;
-  });
+/** Spawn slot for each player, in join order (round start). */
+export function spawnAssignments(state: GameState, spawns: Vec2[]): [Player, Vec2][] {
+  const out: [Player, Vec2][] = [];
+  state.players.forEach((p: Player) => out.push([p, spawns[out.length % spawns.length]]));
+  return out;
 }
 
 /**

@@ -1,0 +1,204 @@
+{
+  "_help": [
+    "Every room and corridor is a rectangle of FLOOR tiles (x, y = top-left tile, w, h = size). Walls are generated around them automatically.",
+    "Leave exactly 1 tile between neighbouring rooms/corridors: that tile becomes the shared wall, and doors are cut through it.",
+    "w/h default to the size for the room's kind (see 'sizes'). Give w/h explicitly to override.",
+    "Doors: side N/S/E/W, 'at' = tile offset along that side (omit to centre). Each door is 2 tiles wide.",
+    "label is what players see. Change it freely. id is what tasks.json and 'vents' refer to (as F<floor>:<id>).",
+    "Furniture and hiding spots come from 'furniture' (per kind) and are placed by code; pieces that would block a door or cut a room in half are skipped.",
+    "Run `npm run map` to check the layout and print an ASCII preview of both floors."
+  ],
+  "sizes": {
+    "standard": [7, 6],
+    "rangeen": [16, 10],
+    "hub": [18, 10],
+    "washroom": [8, 6],
+    "stairs": [4, 4]
+  },
+  "floors": [
+    {
+      "id": 2,
+      "name": "Floor 2",
+      "width": 62,
+      "height": 44,
+      "rooms": [
+        { "id": "Stair W", "label": "Stair W", "kind": "stairs", "x": 1, "y": 3, "doors": [{ "side": "S" }] },
+        { "id": "301", "label": "301", "kind": "standard", "x": 6, "y": 1, "doors": [{ "side": "S" }] },
+        { "id": "302", "label": "302", "kind": "standard", "x": 14, "y": 1, "doors": [{ "side": "S" }] },
+        { "id": "303", "label": "303", "kind": "standard", "x": 22, "y": 1, "doors": [{ "side": "S" }] },
+        { "id": "305", "label": "305", "kind": "standard", "x": 30, "y": 1, "doors": [{ "side": "S" }] },
+        { "id": "Warden", "label": "Warden's Office", "kind": "office", "x": 38, "y": 1, "w": 12, "h": 6, "doors": [{ "side": "S" }] },
+        { "id": "Store", "label": "Store Room", "kind": "store", "x": 51, "y": 1, "w": 10, "h": 6, "doors": [{ "side": "S", "at": 1 }] },
+
+        { "id": "Washroom", "label": "Washroom", "kind": "washroom", "x": 5, "y": 12, "doors": [{ "side": "N", "at": 3 }, { "side": "S", "at": 3 }] },
+        { "id": "Lounge", "label": "Common Lounge", "kind": "hub", "x": 14, "y": 12, "doors": [{ "side": "N" }, { "side": "E", "at": 4 }, { "side": "S", "at": 3 }] },
+        { "id": "304", "label": "304 Rangeen", "kind": "rangeen", "x": 33, "y": 12, "doors": [{ "side": "N", "at": 7 }, { "side": "W", "at": 4 }] },
+        { "id": "Mess", "label": "Mess Hall", "kind": "mess", "x": 14, "y": 23, "w": 35, "h": 9, "doors": [{ "side": "S", "at": 16 }, { "side": "E", "at": 3 }] },
+        { "id": "306", "label": "306", "kind": "standard", "x": 54, "y": 12, "doors": [{ "side": "W" }] },
+        { "id": "307", "label": "307", "kind": "standard", "x": 54, "y": 19, "doors": [{ "side": "W" }] },
+        { "id": "308", "label": "308", "kind": "standard", "x": 54, "y": 26, "doors": [{ "side": "W" }] },
+
+        { "id": "309", "label": "309", "kind": "standard", "x": 1, "y": 37, "doors": [{ "side": "N" }] },
+        { "id": "310", "label": "310", "kind": "standard", "x": 9, "y": 37, "doors": [{ "side": "N" }] },
+        { "id": "311", "label": "311", "kind": "standard", "x": 17, "y": 37, "doors": [{ "side": "N" }] },
+        { "id": "312", "label": "312", "kind": "standard", "x": 25, "y": 37, "doors": [{ "side": "N" }] },
+        { "id": "Laundry", "label": "Dhobi Ghat", "kind": "laundry", "x": 33, "y": 37, "w": 22, "h": 6, "doors": [{ "side": "N", "at": 2 }, { "side": "N", "at": 18 }] },
+        { "id": "Stair E", "label": "Stair E", "kind": "stairs", "x": 57, "y": 37, "doors": [{ "side": "N" }] }
+      ],
+      "corridors": [
+        { "id": "Corridor", "label": "North Corridor", "x": 1, "y": 8, "w": 60, "h": 3 },
+        { "id": "Corridor S", "label": "South Corridor", "x": 1, "y": 33, "w": 60, "h": 3 },
+        { "id": "Corridor W", "label": "", "x": 1, "y": 8, "w": 3, "h": 28 },
+        { "id": "Passage", "label": "", "x": 7, "y": 19, "w": 3, "h": 15 },
+        { "id": "Corridor E", "label": "", "x": 50, "y": 8, "w": 3, "h": 28 }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Floor 3",
+      "width": 62,
+      "height": 44,
+      "rooms": [
+        { "id": "Stair W", "label": "Stair W", "kind": "stairs", "x": 1, "y": 3, "doors": [{ "side": "S" }] },
+        { "id": "412", "label": "412", "kind": "standard", "x": 6, "y": 1, "doors": [{ "side": "S" }] },
+        { "id": "413", "label": "413", "kind": "standard", "x": 14, "y": 1, "doors": [{ "side": "S" }] },
+        { "id": "414", "label": "414", "kind": "standard", "x": 22, "y": 1, "doors": [{ "side": "S" }] },
+        { "id": "415", "label": "415", "kind": "standard", "x": 30, "y": 1, "doors": [{ "side": "S" }] },
+        { "id": "Gym", "label": "Gym", "kind": "gym", "x": 38, "y": 1, "w": 23, "h": 6, "doors": [{ "side": "S", "at": 3 }, { "side": "S", "at": 18 }] },
+
+        { "id": "Terrace", "label": "Terrace", "kind": "terrace", "x": 1, "y": 12, "w": 12, "h": 20, "doors": [{ "side": "N", "at": 5 }, { "side": "S", "at": 5 }] },
+        { "id": "Study Hall", "label": "Study Hall", "kind": "hub", "x": 14, "y": 12, "doors": [{ "side": "N" }, { "side": "E", "at": 4 }, { "side": "S" }] },
+        { "id": "TV Room", "label": "TV Room", "kind": "tv", "x": 14, "y": 23, "w": 18, "h": 9, "doors": [{ "side": "S", "at": 3 }] },
+        { "id": "Library", "label": "Library", "kind": "library", "x": 33, "y": 12, "w": 16, "h": 20, "doors": [{ "side": "E", "at": 3 }, { "side": "S", "at": 7 }] },
+        { "id": "416", "label": "416", "kind": "standard", "x": 54, "y": 12, "doors": [{ "side": "W" }] },
+        { "id": "417", "label": "417", "kind": "standard", "x": 54, "y": 19, "doors": [{ "side": "W" }] },
+
+        { "id": "418", "label": "418", "kind": "standard", "x": 1, "y": 37, "doors": [{ "side": "N" }] },
+        { "id": "419", "label": "419", "kind": "standard", "x": 9, "y": 37, "doors": [{ "side": "N" }] },
+        { "id": "420", "label": "420", "kind": "standard", "x": 17, "y": 37, "doors": [{ "side": "N" }] },
+        { "id": "421", "label": "421", "kind": "standard", "x": 25, "y": 37, "doors": [{ "side": "N" }] },
+        { "id": "Stair E", "label": "Stair E", "kind": "stairs", "x": 57, "y": 37, "doors": [{ "side": "N" }] }
+      ],
+      "corridors": [
+        { "id": "Corridor", "label": "North Corridor", "x": 1, "y": 8, "w": 60, "h": 3 },
+        { "id": "Corridor S", "label": "South Corridor", "x": 1, "y": 33, "w": 60, "h": 3 },
+        { "id": "Corridor E", "label": "", "x": 50, "y": 8, "w": 3, "h": 28 }
+      ]
+    }
+  ],
+  "stairs": [
+    ["F2:Stair W", "F3:Stair W"],
+    ["F2:Stair E", "F3:Stair E"]
+  ],
+  "vents": [
+    ["F2:303", "F2:310"],
+    ["F2:308", "F3:417"],
+    ["F2:305", "F3:413"],
+    ["F3:415", "F3:Terrace"]
+  ],
+  "spawn": { "room": "F2:Washroom", "cols": 5, "rows": 4 },
+  "lockers": {
+    "_help": "Lockers (hiding spots) are placed along the walls of every corridor, one every 'spacing' tiles.",
+    "spacing": 9
+  },
+  "furniture": {
+    "_help": "Per room kind. anchor = which corner/edge of the room the piece hugs (NW, NE, SW, SE, N, S, E, W, C). dx/dy push it inward. solid pieces block movement (and, from phase 3, sight). hide pieces are hiding spots you can walk onto and press USE.",
+    "standard": [
+      { "type": "bed", "w": 2, "h": 3, "anchor": "NW", "solid": true },
+      { "type": "under-bed", "w": 1, "h": 1, "anchor": "NW", "dx": 2, "dy": 1, "hide": true },
+      { "type": "desk", "w": 2, "h": 1, "anchor": "NE", "solid": true },
+      { "type": "cupboard", "w": 1, "h": 1, "anchor": "SE", "hide": true }
+    ],
+    "stairs": [],
+    "washroom": [
+      { "type": "sink", "w": 2, "h": 1, "anchor": "N", "dx": 0, "dy": 0, "solid": false }
+    ],
+    "rangeen": [
+      { "type": "sofa", "w": 4, "h": 1, "anchor": "NW", "dx": 2, "dy": 2, "solid": true },
+      { "type": "sofa", "w": 4, "h": 1, "anchor": "SE", "dx": 2, "dy": 2, "solid": true },
+      { "type": "speaker", "w": 1, "h": 2, "anchor": "NE", "dx": 2, "dy": 1, "solid": true },
+      { "type": "table", "w": 2, "h": 2, "anchor": "C", "dx": -3, "dy": 0, "solid": true },
+      { "type": "table", "w": 2, "h": 2, "anchor": "C", "dx": 3, "dy": 0, "solid": true },
+      { "type": "beanbag", "w": 1, "h": 1, "anchor": "SW", "dx": 1, "dy": 1, "hide": true },
+      { "type": "curtain", "w": 1, "h": 1, "anchor": "NE", "hide": true },
+      { "type": "curtain", "w": 1, "h": 1, "anchor": "SW", "dx": 6, "hide": true }
+    ],
+    "hub": [
+      { "type": "sofa", "w": 4, "h": 1, "anchor": "C", "dx": -4, "dy": -2, "solid": true },
+      { "type": "sofa", "w": 4, "h": 1, "anchor": "C", "dx": 4, "dy": 2, "solid": true },
+      { "type": "tv", "w": 3, "h": 1, "anchor": "N", "dx": 5, "solid": true },
+      { "type": "carrom", "w": 2, "h": 2, "anchor": "SW", "dx": 2, "dy": 2, "solid": true },
+      { "type": "curtain", "w": 1, "h": 1, "anchor": "NW", "hide": true },
+      { "type": "cupboard", "w": 1, "h": 1, "anchor": "SE", "hide": true }
+    ],
+    "mess": [
+      { "type": "table", "w": 6, "h": 1, "anchor": "NW", "dx": 2, "dy": 2, "solid": true },
+      { "type": "table", "w": 6, "h": 1, "anchor": "SW", "dx": 2, "dy": 2, "solid": true },
+      { "type": "table", "w": 6, "h": 1, "anchor": "N", "dx": 0, "dy": 2, "solid": true },
+      { "type": "table", "w": 6, "h": 1, "anchor": "S", "dx": -6, "dy": 2, "solid": true },
+      { "type": "table", "w": 6, "h": 1, "anchor": "NE", "dx": 2, "dy": 2, "solid": true },
+      { "type": "table", "w": 6, "h": 1, "anchor": "SE", "dx": 2, "dy": 2, "solid": true },
+      { "type": "counter", "w": 1, "h": 4, "anchor": "W", "solid": true },
+      { "type": "food-drum", "w": 1, "h": 1, "anchor": "NE", "hide": true },
+      { "type": "food-drum", "w": 1, "h": 1, "anchor": "SW", "dx": 4, "hide": true },
+      { "type": "under-table", "w": 1, "h": 1, "anchor": "N", "dx": 0, "dy": 3, "hide": true }
+    ],
+    "office": [
+      { "type": "desk", "w": 3, "h": 1, "anchor": "N", "dy": 1, "solid": true },
+      { "type": "file-cabinet", "w": 1, "h": 1, "anchor": "NW", "hide": true },
+      { "type": "file-cabinet", "w": 1, "h": 1, "anchor": "NE", "hide": true }
+    ],
+    "store": [
+      { "type": "boxes", "w": 2, "h": 2, "anchor": "NE", "solid": true },
+      { "type": "boxes", "w": 2, "h": 1, "anchor": "N", "dx": -1, "solid": true },
+      { "type": "mattress-pile", "w": 1, "h": 1, "anchor": "NW", "hide": true },
+      { "type": "boxes", "w": 1, "h": 1, "anchor": "SE", "hide": true },
+      { "type": "boxes", "w": 1, "h": 1, "anchor": "C", "dx": 1, "hide": true }
+    ],
+    "laundry": [
+      { "type": "washing-machine", "w": 2, "h": 1, "anchor": "SW", "solid": true },
+      { "type": "washing-machine", "w": 2, "h": 1, "anchor": "SE", "solid": true },
+      { "type": "clothesline", "w": 1, "h": 1, "anchor": "C", "dx": -6, "hide": true },
+      { "type": "clothesline", "w": 1, "h": 1, "anchor": "C", "dx": -2, "hide": true },
+      { "type": "clothesline", "w": 1, "h": 1, "anchor": "C", "dx": 2, "hide": true },
+      { "type": "clothesline", "w": 1, "h": 1, "anchor": "C", "dx": 6, "hide": true },
+      { "type": "bucket-pile", "w": 3, "h": 1, "anchor": "S", "solid": true }
+    ],
+    "terrace": [
+      { "type": "water-tank", "w": 3, "h": 3, "anchor": "NE", "dx": 1, "dy": 3, "solid": true },
+      { "type": "water-tank", "w": 3, "h": 3, "anchor": "SW", "dx": 1, "dy": 4, "solid": true },
+      { "type": "behind-tank", "w": 1, "h": 1, "anchor": "NE", "dy": 3, "hide": true },
+      { "type": "behind-tank", "w": 1, "h": 1, "anchor": "SW", "dy": 4, "hide": true },
+      { "type": "chai-stall", "w": 2, "h": 1, "anchor": "C", "dy": 0, "solid": true },
+      { "type": "plant", "w": 1, "h": 1, "anchor": "NW", "dy": 3, "hide": true },
+      { "type": "plant", "w": 1, "h": 1, "anchor": "SE", "dy": 4, "hide": true }
+    ],
+    "library": [
+      { "type": "bookshelf", "w": 5, "h": 1, "anchor": "NW", "dx": 2, "dy": 2, "solid": true },
+      { "type": "bookshelf", "w": 5, "h": 1, "anchor": "NE", "dx": 2, "dy": 2, "solid": true },
+      { "type": "bookshelf", "w": 5, "h": 1, "anchor": "W", "dx": 2, "dy": -3, "solid": true },
+      { "type": "bookshelf", "w": 5, "h": 1, "anchor": "E", "dx": 2, "dy": -3, "solid": true },
+      { "type": "bookshelf", "w": 5, "h": 1, "anchor": "W", "dx": 2, "dy": 3, "solid": true },
+      { "type": "bookshelf", "w": 5, "h": 1, "anchor": "E", "dx": 2, "dy": 3, "solid": true },
+      { "type": "bookshelf", "w": 5, "h": 1, "anchor": "SW", "dx": 2, "dy": 3, "solid": true },
+      { "type": "between-shelves", "w": 1, "h": 1, "anchor": "NW", "dx": 2, "dy": 3, "hide": true },
+      { "type": "between-shelves", "w": 1, "h": 1, "anchor": "E", "dx": 2, "dy": -2, "hide": true },
+      { "type": "between-shelves", "w": 1, "h": 1, "anchor": "W", "dx": 2, "dy": 4, "hide": true },
+      { "type": "between-shelves", "w": 1, "h": 1, "anchor": "SE", "dx": 2, "dy": 1, "hide": true }
+    ],
+    "tv": [
+      { "type": "tv", "w": 4, "h": 1, "anchor": "N", "solid": true },
+      { "type": "sofa", "w": 5, "h": 1, "anchor": "C", "dx": -3, "dy": 1, "solid": true },
+      { "type": "sofa", "w": 5, "h": 1, "anchor": "C", "dx": 4, "dy": 1, "solid": true },
+      { "type": "behind-sofa", "w": 1, "h": 1, "anchor": "C", "dx": -3, "dy": 2, "hide": true },
+      { "type": "curtain", "w": 1, "h": 1, "anchor": "NE", "hide": true }
+    ],
+    "gym": [
+      { "type": "bench", "w": 3, "h": 1, "anchor": "C", "dx": -5, "solid": true },
+      { "type": "bench", "w": 3, "h": 1, "anchor": "C", "dx": 5, "solid": true },
+      { "type": "rack", "w": 1, "h": 2, "anchor": "NE", "dx": 1, "solid": true },
+      { "type": "mat-pile", "w": 1, "h": 1, "anchor": "NW", "hide": true },
+      { "type": "mat-pile", "w": 1, "h": 1, "anchor": "SE", "dx": 4, "hide": true }
+    ]
+  }
+}

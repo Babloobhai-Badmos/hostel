@@ -48,14 +48,18 @@ export const NAME_FALLBACK = "Hosteller";
 // ---------- World ----------
 export const TILE_SIZE = 32;
 
-/** Phase 1 placeholder room (replaced by the generated hostel map in phase 2). */
-export const TEST_ROOM_WIDTH_TILES = 30;
-export const TEST_ROOM_HEIGHT_TILES = 20;
-
-/** Spawn grid: 20 markers in a 5x4 grid. */
-export const SPAWN_GRID_COLS = 5;
-export const SPAWN_GRID_ROWS = 4;
+/** Corridors must be exactly this wide (the map builder rejects anything else). */
+export const CORRIDOR_WIDTH_TILES = 3;
+/** Every door gap is this wide. */
+export const DOOR_WIDTH_TILES = 2;
+/** Distance between spawn markers (the grid size itself is in layout.json). */
 export const SPAWN_GRID_SPACING_TILES = 1.5;
+
+// ---------- Interactions (USE button) ----------
+/** How close (centre to centre) you must be to a hiding spot to get in. */
+export const HIDE_RANGE_TILES = 1.1;
+/** After taking the stairs you can't take them again for this long (stops double-tap bouncing). */
+export const STAIR_COOLDOWN_MS = 800;
 
 // ---------- Players ----------
 /** Base walking speed in tiles per second. Character speed multipliers scale this. */
@@ -74,6 +78,14 @@ export const PLAYER_COLORS: readonly number[] = [
   0x008080, 0xe6beff, 0x9a6324, 0xfffac8, 0x800000,
   0xaaffc3, 0x808000, 0xffd8b1, 0x000075, 0xffffff,
 ];
+
+// ---------- Vision (used from phase 3) ----------
+/** Living crew see this far. */
+export const VISION_RADIUS_TILES = 6;
+/** Killers see this fraction of the crew radius. */
+export const KILLER_VISION_MULTIPLIER = 0.5;
+/** During the lights-out event everyone's radius drops to this. */
+export const LIGHTS_OUT_RADIUS_TILES = 2;
 
 // ---------- Client view ----------
 /** The camera zooms so roughly this many tiles fit across the screen on any device. */

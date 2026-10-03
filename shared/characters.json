@@ -1,0 +1,71 @@
+[
+  {
+    "id": "arch-semen",
+    "name": "Arch-Semen",
+    "role": "killer",
+    "speed": 1.2,
+    "attackRange": 1.0,
+    "attackCooldown": 2.0,
+    "canVent": true,
+    "ability": "dash",
+    "abilityCooldown": 12
+  },
+  {
+    "id": "kallu-koli",
+    "name": "Kallu Koli",
+    "role": "killer",
+    "speed": 0.8,
+    "attackRange": 1.5,
+    "attackCooldown": 15,
+    "canVent": true,
+    "ability": "wide-swing",
+    "abilityCooldown": 15
+  },
+  {
+    "id": "mota-dalla",
+    "name": "Mota-dalla",
+    "role": "killer",
+    "speed": 0.6,
+    "attackRange": 1.5,
+    "attackCooldown": 15,
+    "canVent": true,
+    "ability": "poisonous-smell"
+  },
+  {
+    "id": "laal-jhanda",
+    "name": "Laal Jhanda",
+    "role": "killer",
+    "speed": 1.2,
+    "attackRange": 0.8,
+    "attackCooldown": 15,
+    "canVent": true,
+    "ability": "red-cloth",
+    "finisher": "throws a red cloth around the victim's neck and strangles them"
+  },
+  {
+    "id": "gujju-rapper",
+    "name": "Gujju Rapper",
+    "role": "killer",
+    "npc": true,
+    "home": "F2:303",
+    "speed": 1.0,
+    "canVent": false,
+    "ability": "beat-stun",
+    "abilityCooldown": 20,
+    "stunRadius": 4,
+    "stunSeconds": 3,
+    "finisher": "butt-crush: twerks, then drops onto the stunned victim and sits on their face until they stop moving"
+  },
+  {
+    "id": "supreme-leader",
+    "name": "Supreme Leader",
+    "role": "savior",
+    "speed": 1.0,
+    "canVent": false,
+    "ability": "revive-once",
+    "shield": true,
+    "shieldSeconds": 5,
+    "shieldCooldown": 30,
+    "reviveHoldSeconds": 3
+  }
+]
