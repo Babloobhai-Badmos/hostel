@@ -126,7 +126,8 @@ export class CombatSystem {
     const grid = this.map.floors.get(killer.floor)?.grid;
     if (!grid) return 0;
     const facing = this.movement.facing(killer.id);
-    const reach = attackReachPx(c.attackRange ?? 1, ATTACK_REACH_TOLERANCE_TILES);
+    const range = wide ? c.wideSwingRange ?? c.attackRange ?? 1 : c.attackRange ?? 1;
+    const reach = attackReachPx(range, ATTACK_REACH_TOLERANCE_TILES);
     const victims = [...this.state.players.values()].filter((p) => this.isVictim(p));
     const targets = wide
       ? pickAllAttackTargets(grid, killer, facing, reach, victims, WIDE_SWING_ARC_DEG)

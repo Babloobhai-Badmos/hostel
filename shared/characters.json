@@ -22,6 +22,7 @@
     "canVent": true,
     "ability": "wide-swing",
     "abilityCooldown": 15,
+    "wideSwingRange": 12,
     "finisher": "bonk",
     "blurb": "Slow, long reach. WIDE SWING (Q / ABILITY): your next hit flattens everyone in front of you."
   },
@@ -35,7 +36,7 @@
     "canVent": true,
     "ability": "poisonous-smell",
     "abilityCooldown": 20,
-    "gasRadius": 1.5,
+    "gasRadius": 12,
     "gasSeconds": 4,
     "finisher": "splat",
     "blurb": "Slowest in the hostel. GAS (Q / ABILITY): a poisonous cloud that kills anyone who walks into it. Killers are immune."

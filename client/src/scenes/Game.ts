@@ -39,6 +39,7 @@ import {
   WARDEN_CONE_DEG,
   WARDEN_CONE_TILES,
   KILLERS_SEE_THROUGH_DOORS,
+  WIDE_SWING_ARC_DEG,
   LIGHTS_OUT_BACK_TILES,
   LIGHTS_OUT_FRONT_TILES,
 } from "../../../shared/constants";
@@ -54,6 +55,8 @@ import { hostelMap } from "../../../shared/world";
 import { areaAt } from "../../../shared/buildMap";
 import { setDoorClosed, visibleAreas } from "../../../shared/doors";
 import { DoorView } from "../render/doors";
+import { createGasCloud } from "../render/gas";
+import type { GasCloud } from "../render/gas";
 import type { Body, Player } from "../../../server/schema/GameState";
 import { KeyboardControls } from "../input/keyboard";
 import { InterpolationBuffer } from "../render/interpolation";
@@ -98,13 +101,13 @@ const GHOST_ALPHA = 0.45;
 const OFFLINE_ALPHA = 0.4;
 /** Drawn above everything in the world, including effects. */
 const FOG_DEPTH = 1_000_000;
+/** Ceiling drawn over rooms you can't see into. */
+const CEILING_COLOR = 0x16121c;
+const CEILING_LINE = 0x2a2433;
 /** The fog rectangle extends this far past the camera edges. */
 const FOG_MARGIN_PX = 200;
 /** A body that appears within this long of its kill message waits for the ragdoll to land. */
 const BODY_REVEAL_WAIT_MS = 1500;
-/** Mota-dalla's gas cloud. */
-const GAS_COLOR = 0x7cb342;
-const GAS_ALPHA = 0.45;
 /** Gujju Rapper's speech bubble per mood. */
 const GUJJU_SPEECH: Record<string, string> = {
   idle: "zzz… 🎧",
@@ -156,7 +159,7 @@ export class GameScene extends Phaser.Scene {
   private chatBubbles = new Map<string, { text: Phaser.GameObjects.Text; until: number }>();
   /** Task ids already done, to spot newly finished ones. */
   private doneTasks = new Set<string>();
-  private gasClouds = new Map<string, { obj: Phaser.GameObjects.Container; gas: Gas }>();
+  private gasClouds = new Map<string, { cloud: GasCloud; gas: Gas }>();
   /** Revive hold in progress (Supreme Leader): when it started, or 0. */
   reviveStartedAt = 0;
   private fog!: Phaser.GameObjects.Graphics;
@@ -334,7 +337,10 @@ export class GameScene extends Phaser.Scene {
     // Fellow killers can't be attacked; the client knows them by name.
     const fellow = new Set(net.role?.fellowKillers ?? []);
     const valid = candidates.filter((cand) => !fellow.has(room.state.players.get(cand.id)?.name ?? ""));
-    return pickAttackTarget(grid, self, this.facing, attackReachPx(c.attackRange ?? 1, ATTACK_REACH_TOLERANCE_TILES * 0.5), valid);
+    // Kallu Koli's armed wide swing reaches further, in a wider arc.
+    const wide = net.wideArmed && c.ability === "wide-swing";
+    const reach = attackReachPx((wide ? c.wideSwingRange : undefined) ?? c.attackRange ?? 1, ATTACK_REACH_TOLERANCE_TILES * 0.5);
+    return pickAttackTarget(grid, self, this.facing, reach, valid, wide ? WIDE_SWING_ARC_DEG : undefined);
   }
 
   // ---------- Setup ----------
@@ -401,20 +407,12 @@ export class GameScene extends Phaser.Scene {
       $(room.state).doors.onChange((open, id) => this.onDoor(id, open, true)),
       $(room.state).doors.onRemove((_open, id) => this.removeDoor(id)),
       $(room.state).gas.onAdd((gas, id) => {
-        const puffs = [0, 1, 2, 3, 4, 5].map((i) => {
-          const a = (i / 6) * Math.PI * 2;
-          return this.add.circle(Math.cos(a) * gas.radius * 0.45, Math.sin(a) * gas.radius * 0.45, gas.radius * 0.6, GAS_COLOR, GAS_ALPHA * 0.6);
-        });
-        const core = this.add.circle(0, 0, gas.radius, GAS_COLOR, GAS_ALPHA);
-        const obj = this.add.container(gas.x, gas.y, [core, ...puffs]).setDepth(gas.y + TILE_SIZE);
-        this.tweens.add({ targets: puffs, scale: 1.2, alpha: GAS_ALPHA * 0.3, duration: 500, yoyo: true, repeat: -1 });
-        this.tweens.add({ targets: obj, angle: 360, duration: 6000, repeat: -1 });
-        this.gasClouds.set(id, { obj, gas });
+        const grid = hostelMap.floors.get(gas.floor)?.grid;
+        if (!grid) return;
+        this.gasClouds.set(id, { cloud: createGasCloud(this, gas.x, gas.y, gas.radius, grid), gas });
       }),
       $(room.state).gas.onRemove((_gas, id) => {
-        const g = this.gasClouds.get(id);
-        if (!g) return;
-        this.tweens.add({ targets: g.obj, alpha: 0, scale: 1.3, duration: 300, onComplete: () => g.obj.destroy() });
+        this.gasClouds.get(id)?.cloud.destroy();
         this.gasClouds.delete(id);
       }),
     );
@@ -656,8 +654,7 @@ export class GameScene extends Phaser.Scene {
         sfx.whoosh(vol);
         break;
       case "wide": {
-        const reach = attackReachPx(net.character?.attackRange ?? 1.5);
-        wideSwingEffect(this, msg.x, msg.y, msg.angle ?? 0, reach);
+        wideSwingEffect(this, msg.x, msg.y, msg.angle ?? 0, msg.radius ?? attackReachPx(1.5));
         sfx.whoosh(vol);
         break;
       }
@@ -890,7 +887,7 @@ export class GameScene extends Phaser.Scene {
       if (n.cone) this.drawWardenCone(n.cone, show, n.pos, n.npc.facing, grid);
     });
 
-    this.gasClouds.forEach((g) => g.obj.setVisible(g.gas.floor === this.currentFloor));
+    this.gasClouds.forEach((g) => g.cloud.obj.setVisible(g.gas.floor === this.currentFloor));
 
     // Chat bubbles fade out.
     for (const [id, b] of this.chatBubbles) {
@@ -947,8 +944,9 @@ export class GameScene extends Phaser.Scene {
   private roomFogKey = "";
 
   /**
-   * Lights on: darkness over every room and corridor you can't see (behind
-   * closed doors). Walls and doors themselves stay visible.
+   * Lights on: every room and corridor you can't see (behind closed doors)
+   * is covered by its ceiling: a dark panel with a fan in the middle. Walls
+   * and doors themselves stay visible.
    */
   private drawRoomFog(seen: Set<number> | null): void {
     const key = seen ? `${this.currentFloor}:${this.seenKey}` : "none";
@@ -958,10 +956,10 @@ export class GameScene extends Phaser.Scene {
     g.clear();
     if (!seen) return;
     const floor = hostelMap.floors.get(this.currentFloor)!;
-    g.fillStyle(0x000000, FOG_ALPHA);
     floor.areas.forEach((a, i) => {
       if (seen.has(i)) return;
-      // Corridors can overlap; only darken tiles that really belong to this area.
+      // Corridors can overlap; only cover tiles that really belong to this area.
+      g.fillStyle(CEILING_COLOR, 1);
       const { x, y, w, h } = a.rect;
       for (let ty = y; ty < y + h; ty++) {
         let run = -1;
@@ -974,6 +972,21 @@ export class GameScene extends Phaser.Scene {
           }
         }
       }
+      if (a.corridor) return;
+      // Ceiling panel edge and a fan.
+      g.lineStyle(2, CEILING_LINE, 1);
+      g.strokeRoundedRect(x * TILE_SIZE + 6, y * TILE_SIZE + 6, w * TILE_SIZE - 12, h * TILE_SIZE - 12, 6);
+      const cx = (x + w / 2) * TILE_SIZE;
+      const cy = (y + h / 2) * TILE_SIZE;
+      g.fillStyle(CEILING_LINE, 1);
+      for (let k = 0; k < 3; k++) {
+        const a0 = (k / 3) * Math.PI * 2 + 0.4;
+        const tip = { x: cx + Math.cos(a0) * 22, y: cy + Math.sin(a0) * 22 };
+        const side = { x: Math.cos(a0 + Math.PI / 2) * 4, y: Math.sin(a0 + Math.PI / 2) * 4 };
+        g.fillTriangle(cx + side.x, cy + side.y, cx - side.x, cy - side.y, tip.x, tip.y);
+        g.fillCircle(tip.x, tip.y, 4);
+      }
+      g.fillCircle(cx, cy, 6);
     });
   }
 

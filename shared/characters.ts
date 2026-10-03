@@ -23,6 +23,8 @@ export interface CharacterDef {
   home?: string;
   finisher?: string;
   blurb?: string;
+  /** Kallu Koli's wide swing: reach in tiles (his normal hits use attackRange). */
+  wideSwingRange?: number;
   /** Mota-dalla's gas. */
   gasRadius?: number;
   gasSeconds?: number;

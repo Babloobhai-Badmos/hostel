@@ -216,6 +216,14 @@ export const FACE_MAX_CHARS = 24_000;
 /** The photo head is drawn this much bigger than the cartoon head (big-head look). */
 export const FACE_HEAD_SCALE = 1.2;
 
+// ---------- Map art (client) ----------
+/**
+ * The floors are painted at this many texture pixels per world pixel, so
+ * they stay smooth when the camera zooms in. 1.5 keeps a 62x44-tile floor
+ * under 3000 px (phones handle up to 4096) and ~25 MB of video memory.
+ */
+export const FLOOR_ART_SCALE = 1.5;
+
 // ---------- Character sprites (client) ----------
 /** World pixels per sprite-sheet pixel: a 64x80 frame is drawn ~51x64 world px (a tile is 32). */
 export const CHARACTER_SPRITE_SCALE = 0.8;

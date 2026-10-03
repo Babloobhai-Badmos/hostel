@@ -16,6 +16,7 @@ import {
 } from "../../shared/constants";
 import { GUJJU_RAPPER_ID, REGULAR } from "../../shared/characters";
 import { useTarget } from "../../shared/interact";
+import { attackReachPx } from "../../shared/combat";
 import { ClientMsg, GamePhase, ServerMsg } from "../../shared/types";
 import type { CooldownMessage, ErrorMessage, FxMessage, JoinOptions, ResultsMessage } from "../../shared/types";
 import { TASKS, hostelMap } from "../../shared/world";
@@ -93,7 +94,7 @@ export class HostelRoom extends Room<GameState> {
       onSearch: (msg) => this.broadcast(ServerMsg.Search, msg),
     });
     const fx = (msg: FxMessage) => this.broadcast(ServerMsg.Fx, msg);
-    this.abilities = new AbilitySystem(this.state, this.roles, this.movement, this.combat, fx);
+    this.abilities = new AbilitySystem(this.state, this.roles, this.movement, this.combat, fx, this.map);
     this.gujju = new GujjuSystem(this.state, this.map, this.combat, fx);
     this.chaos = new ChaosSystem(this.state, this.map, this.combat, fx);
     this.chat = new ChatSystem(this.state, this.map);
@@ -277,7 +278,9 @@ export class HostelRoom extends Room<GameState> {
     const hits = this.combat.tryAttack(player, now, wide);
     if (hits > 0 && wide) {
       this.abilities.consumeWide(player.id);
-      this.broadcast(ServerMsg.Fx, { kind: "wide", floor: player.floor, x: player.x, y: player.y, angle: this.movement.facing(player.id) } satisfies FxMessage);
+      const c = this.roles.get(player.id);
+      const radius = attackReachPx(c?.wideSwingRange ?? c?.attackRange ?? 1);
+      this.broadcast(ServerMsg.Fx, { kind: "wide", floor: player.floor, x: player.x, y: player.y, angle: this.movement.facing(player.id), radius } satisfies FxMessage);
     }
     this.sendCooldowns(client);
   }

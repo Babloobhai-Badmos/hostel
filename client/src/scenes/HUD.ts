@@ -66,6 +66,23 @@ const textStyle = (px: number): Phaser.Types.GameObjects.Text.TextStyle => ({
   strokeThickness: 3,
 });
 
+/** A radial gradient, clear in the middle and dark at the edges (stretched to the screen). */
+function vignetteTexture(scene: Phaser.Scene): string {
+  const key = "vignette";
+  if (scene.textures.exists(key)) return key;
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, size * 0.3, size / 2, size / 2, size * 0.72);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(5,3,10,0.5)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  scene.textures.addCanvas(key, canvas);
+  return key;
+}
+
 function describeUse(t: UseTarget): { button: string; prompt: string } {
   switch (t.kind) {
     case "unhide":
@@ -129,6 +146,8 @@ export class HUDScene extends Phaser.Scene {
   private cleanups: (() => void)[] = [];
   private taskList!: Phaser.GameObjects.Text;
   private chaosBanner!: Phaser.GameObjects.Text;
+  /** Soft darkening towards the screen edges, over the world and under the HUD. */
+  private vignette?: Phaser.GameObjects.Image;
   private chaosBannerUntil = 0;
   private lastChaos = "";
   private nextFoodAt = 0;
@@ -145,6 +164,7 @@ export class HUDScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.vignette = this.add.image(0, 0, vignetteTexture(this)).setOrigin(0, 0).setDepth(-10);
     this.touch = new TouchControls(this);
     this.status = this.add.text(MARGIN_PX, MARGIN_PX, "", textStyle(STATUS_FONT_PX));
     this.prompt = this.add.text(0, 0, "", textStyle(STATUS_FONT_PX + 2)).setOrigin(0.5, 1);
@@ -393,6 +413,7 @@ export class HUDScene extends Phaser.Scene {
 
   private layout(): void {
     const { width, height } = this.scale;
+    this.vignette?.setDisplaySize(width, height);
     this.banner.setPosition(width / 2, height / 2);
     this.revealBg?.setSize(width, height);
     this.chaosBanner?.setPosition(width / 2, height * 0.28).setWordWrapWidth(width * 0.8);

@@ -98,8 +98,8 @@ Everyone else is a regular Hosteller. Killers all look exactly like everyone els
 | Character | ABILITY (Q) | Cooldown |
 | --- | --- | --- |
 | Arch-Semen | **Dash**: 0.4 s at 2.5x speed. A hit while dashing counts normally. | 12 s |
-| Kallu Koli | **Wide swing**: arms your next attack to hit everyone in a 180° arc in front of you. | 15 s |
-| Mota-dalla | **Poison gas**: a green cloud (1.5 tiles) at your feet for 4 s. Anyone (except killers) in it dies. | 20 s |
+| Kallu Koli | **Wide swing**: arms your next attack to hit everyone in a 180° arc in front of you, up to 12 tiles away (walls and closed doors block it). His normal hit still reaches 1.5 tiles. | 15 s |
+| Mota-dalla | **Poison gas**: a green cloud at your feet for 4 s that spreads up to 12 tiles but stops at walls and closed doors. Anyone (except killers) in it dies. | 20 s |
 | Laal Jhanda | none (his kill is the red-cloth strangle) | |
 | Supreme Leader | **Shield**: the nearest player within 2 tiles (or yourself) can't be killed for 5 s. Plus **revive**: hold USE on a body for 3 s to bring them back, once per round. Can't kill. | 30 s |
 
@@ -107,7 +107,7 @@ Everyone else is a regular Hosteller. Killers all look exactly like everyone els
 
 Stunned players can't move or act, but can still be killed. Shielded players show a blue bubble that everyone can see.
 
-All numbers live in `shared/characters.json` (cooldowns, gas radius, stun radius/length, shield length) and `shared/constants.ts` (dash speed, wide-swing arc, Gujju's reaction time, ranges).
+All numbers live in `shared/characters.json` (cooldowns, gas radius, wide-swing range, stun radius/length, shield length) and `shared/constants.ts` (dash speed, wide-swing arc, Gujju's reaction time, ranges).
 
 ## Chaos events
 
@@ -121,6 +121,10 @@ Every 60–90 seconds something happens, one at a time, with a siren and a banne
 | ⚡ Power cut | Door gaps flicker black, BZZZT. Cosmetic only. | 10 s |
 
 No event ever kills anyone. Timings are in `shared/constants.ts`. To try them quickly the host can add `&chaos=all` (or `&chaos=warden`, `lights`, `foodfight`, `powercut`) to a debug URL, and events then come every 12 seconds.
+
+## Graphics
+
+The map is painted when the game loads (no image files): wooden dorm floors, terrazzo corridors, red-oxide mess hall, carpets, concrete, with rugs, ceiling-light glow, soft shadows along the walls, windows, nameplates over every room, and detailed furniture (beds, desks with laptops, thalis on the mess tables, carrom, lockers, water tanks...). Hiding spots have a dashed golden outline. Rooms you can't see into show their ceiling. The painters are in `client/src/render/mapRenderer.ts` and `client/src/render/art/`; `FLOOR_ART_SCALE` in `shared/constants.ts` trades sharpness for memory.
 
 ## Doors
 

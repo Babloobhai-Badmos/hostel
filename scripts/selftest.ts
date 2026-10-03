@@ -22,6 +22,7 @@ import { character } from "../shared/characters";
 import { hostelMap } from "../shared/world";
 import { areaAt } from "../shared/buildMap";
 import { doorwaySides } from "../shared/doors";
+import { hasLineOfSight } from "../shared/physics";
 import { ClientMsg, ServerMsg } from "../shared/types";
 import { DEFAULT_URL, TestClient, sleep } from "./testClient";
 
@@ -259,19 +260,38 @@ async function gasScenario(): Promise<void> {
   if (!setup) return check("gas scenario set up", false);
   const { host, crew, startedAt } = setup;
   await waitPlaying(startedAt, true);
-  // Mota walks into the corridor, away from the crowd of bots at spawn; the
-  // crew player waits a few tiles away (the cloud only lasts 4 s).
+  // Mota walks into the corridor, away from the crowd of bots at spawn. The
+  // crew player waits nearby but around a corner (the gas doesn't go through
+  // walls), then walks into it.
   const spot = hostelMap.tasks.get("measure")!;
   await host.walkTo(spot);
-  await crew.walkTo({ x: spot.x + TILE_SIZE * 4, y: spot.y });
+  const floor = hostelMap.floors.get(host.me.floor)!;
+  const grid = floor.grid;
+  let cover: { x: number; y: number } | null = null;
+  let coverD = Infinity;
+  for (let ty = 0; ty < grid.height; ty++) {
+    for (let tx = 0; tx < grid.width; tx++) {
+      if (grid.solid[ty * grid.width + tx] || floor.areaIndex[ty * grid.width + tx] < 0) continue;
+      const p = { x: (tx + 0.5) * TILE_SIZE, y: (ty + 0.5) * TILE_SIZE };
+      const d = Math.hypot(p.x - host.me.x, p.y - host.me.y);
+      if (d < TILE_SIZE * 3 || d > TILE_SIZE * 8 || d >= coverD) continue;
+      if (hasLineOfSight(grid, host.me.x, host.me.y, p.x, p.y)) continue;
+      // Clear of the doorway sight lines too: nothing within a tile of it can see the cloud.
+      if ([[-1, 0], [1, 0], [0, -1], [0, 1]].some(([ox, oy]) => hasLineOfSight(grid, host.me.x, host.me.y, p.x + ox * TILE_SIZE, p.y + oy * TILE_SIZE))) continue;
+      cover = p;
+      coverD = d;
+    }
+  }
+  check("crew finds cover around a corner", !!cover && (await crew.walkTo(cover)));
   host.send(ClientMsg.Ability);
-  await sleep(200);
+  await sleep(300);
   const gas = [...(host.room.state as { gas: Map<string, { x: number; y: number }> }).gas.values()][0];
   check("gas cloud appears", !!gas);
   check("killers are immune to their own gas", host.me.alive);
-  check("crew can walk into the gas", await crew.walkTo({ x: host.me.x + TILE_SIZE * 0.5, y: host.me.y }));
+  check("walls keep the gas out", crew.me.alive);
+  await crew.walkTo({ x: host.me.x + TILE_SIZE * 0.5, y: host.me.y }, 3000);
   await sleep(200);
-  check("the gas kills crew who walk in", !crew.me.alive);
+  check("the gas kills crew who walk into it", !crew.me.alive);
   await sleep(4200);
   check("the gas fades", (host.room.state as { gas: Map<string, unknown> }).gas.size === 0);
   await host.leave();

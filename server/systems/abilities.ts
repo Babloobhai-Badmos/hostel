@@ -22,6 +22,8 @@ import {
   WIDE_SWING_ARMED_SECONDS,
 } from "../../shared/constants";
 import type { FxMessage } from "../../shared/types";
+import type { HostelMap } from "../../shared/buildMap";
+import { hasLineOfSight } from "../../shared/physics";
 import { Gas } from "../schema/GameState";
 import type { GameState, Player } from "../schema/GameState";
 import type { CombatSystem } from "./combat";
@@ -53,6 +55,7 @@ export class AbilitySystem {
     private movement: MovementSystem,
     private combat: CombatSystem,
     private fx: (msg: FxMessage) => void,
+    private map: HostelMap,
   ) {}
 
   reset(): void {
@@ -170,9 +173,12 @@ export class AbilitySystem {
       }
       const owner = this.state.players.get(cloud.ownerId) ?? null;
       const reach = gas.radius + PLAYER_RADIUS_PX;
+      // The gas fills the space around it but doesn't go through walls or closed doors.
+      const grid = this.map.floors.get(gas.floor)?.grid;
       this.state.players.forEach((p) => {
         if (p.floor !== gas.floor || !this.combat.isVictim(p)) return;
         if ((p.x - gas.x) ** 2 + (p.y - gas.y) ** 2 > reach * reach) return;
+        if (grid && !hasLineOfSight(grid, gas.x, gas.y, p.x, p.y)) return;
         this.combat.kill(p, owner, Math.atan2(p.y - gas.y, p.x - gas.x), GAS_FINISHER);
       });
     }
