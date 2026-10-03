@@ -202,8 +202,10 @@ export class TouchControls {
     }
   }
 
-  private onDown(p: Phaser.Input.Pointer): void {
+  private onDown(p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[] = []): void {
     if (!this.visible || this.suspended) return;
+    // Taps on other HUD buttons (minimap, chat) aren't joystick touches.
+    if (over.length > 0) return;
     for (const b of this.buttons) {
       if (Phaser.Math.Distance.Between(p.x, p.y, b.x, b.y) <= b.r * 1.15) {
         if (b.enabled) {

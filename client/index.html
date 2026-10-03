@@ -212,6 +212,42 @@
         font-size: 22px;
       }
 
+      /* ---------- Chat input (Common Lounge) ---------- */
+      #chat-box {
+        position: absolute;
+        left: 50%;
+        bottom: 12px;
+        transform: translateX(-50%);
+        width: min(90vw, 520px);
+        display: none;
+        z-index: 12;
+      }
+      #chat-box.show {
+        display: flex;
+        gap: 8px;
+      }
+      #chat-box input {
+        flex: 1;
+        min-width: 0;
+        font-size: 16px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 2px solid #f4c430;
+        background: #14121cee;
+        color: #f4f0e6;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      #chat-box button {
+        font-size: 16px;
+        font-weight: 800;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: none;
+        background: #f4c430;
+        color: #14121c;
+      }
+
       /* ---------- Rotate prompt for phones held in portrait ---------- */
       #rotate {
         position: absolute;
@@ -289,6 +325,11 @@
         <button id="again-btn" class="hidden">PLAY AGAIN</button>
         <div id="results-wait" class="tag">Waiting for the host…</div>
       </div>
+    </div>
+
+    <div id="chat-box">
+      <input id="chat-input" maxlength="80" placeholder="Say something to the lounge…" autocomplete="off" enterkeyhint="send" />
+      <button id="chat-send">SEND</button>
     </div>
 
     <div id="rotate">

@@ -31,6 +31,7 @@ export class TestClient {
   tasks: TaskListMessage = { tasks: [], fake: false };
   lastOpen: TaskOpenMessage | null = null;
   closes = 0;
+  chats: { name: string; text: string }[] = [];
   private seq = 0;
 
   /** Without `roomId`, creates a brand-new room so the test never lands in a real game. */
@@ -41,6 +42,7 @@ export class TestClient {
     this.room.onMessage(ServerMsg.TaskList, (m: TaskListMessage) => (this.tasks = m));
     this.room.onMessage(ServerMsg.TaskOpen, (m: TaskOpenMessage) => (this.lastOpen = m));
     this.room.onMessage(ServerMsg.TaskClose, () => this.closes++);
+    this.room.onMessage(ServerMsg.Chat, (m: { name: string; text: string }) => this.chats.push(m));
     for (const t of [ServerMsg.Cooldowns, ServerMsg.Kill, ServerMsg.VentPop, ServerMsg.Search, ServerMsg.Results, ServerMsg.Error, ServerMsg.Fx]) {
       this.room.onMessage(t, () => {});
     }

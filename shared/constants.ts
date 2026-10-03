@@ -158,6 +158,34 @@ export const TASK_MIN_SECONDS = 2;
 /** Debug bots tick off one of their tasks this often (they don't play minigames). */
 export const DEBUG_BOT_TASK_SECONDS = 25;
 
+// ---------- Chaos events (one at a time, every CHAOS_MIN..MAX seconds) ----------
+export const CHAOS_MIN_SECONDS = 60;
+export const CHAOS_MAX_SECONDS = 90;
+/** Debug rooms with ?chaos=… fire events this often instead. */
+export const CHAOS_DEBUG_SECONDS = 12;
+export const WARDEN_SECONDS = 20;
+/** Warden walking speed (multiple of base speed), flashlight cone and stun. */
+export const WARDEN_SPEED_MULTIPLIER = 0.8;
+export const WARDEN_CONE_DEG = 60;
+export const WARDEN_CONE_TILES = 5;
+export const WARDEN_STUN_SECONDS = 3;
+/** The warden won't re-stun the same person within this long. */
+export const WARDEN_RESTUN_SECONDS = 6;
+export const LIGHTS_OUT_SECONDS = 15;
+export const FOOD_FIGHT_SECONDS = 8;
+export const POWER_CUT_SECONDS = 10;
+
+// ---------- Chat (only inside layout.json "chatRooms", e.g. the Common Lounge) ----------
+export const CHAT_MAX_LENGTH = 80;
+/** One message per this many seconds per player. */
+export const CHAT_COOLDOWN_SECONDS = 1.5;
+/** How long a chat bubble stays over someone's head. */
+export const CHAT_BUBBLE_SECONDS = 4;
+
+// ---------- Juice ----------
+/** Sounds from further away than this are silent; closer ones fade in. */
+export const HEARING_RANGE_TILES = 12;
+
 // ---------- Round end ----------
 export const KILL_FEED_SECONDS = 6;
 /** After the winning condition is met, the round keeps running this long (so the last kill plays out). */

@@ -76,6 +76,7 @@ export class GujjuSystem {
     this.home = this.pickHomeSpot(floor.id, area);
     const npc = new Npc();
     npc.id = NPC_ID;
+    npc.kind = "gujju";
     npc.name = this.def.name;
     npc.floor = floor.id;
     npc.x = this.home.x;
@@ -88,7 +89,7 @@ export class GujjuSystem {
   }
 
   despawn(): void {
-    this.state.npcs.clear();
+    this.state.npcs.delete(NPC_ID);
     this.npc = null;
     this.mood = "idle";
   }

@@ -22,6 +22,8 @@ import { TASKS, hostelMap } from "../../shared/world";
 import { GameState, Player } from "../schema/GameState";
 import { AbilitySystem } from "../systems/abilities";
 import { BotSystem } from "../systems/bots";
+import { ChaosSystem } from "../systems/chaos";
+import { ChatSystem } from "../systems/chat";
 import { CombatSystem } from "../systems/combat";
 import { GujjuSystem } from "../systems/gujju";
 import { HidingSystem } from "../systems/hiding";
@@ -57,6 +59,8 @@ export class HostelRoom extends Room<GameState> {
   private tasks!: TaskSystem;
   private abilities!: AbilitySystem;
   private gujju!: GujjuSystem;
+  private chaos!: ChaosSystem;
+  private chat!: ChatSystem;
   /** Debug settings from the host's join options. */
   private debugBots = DEBUG_DEFAULT_BOT_FILL;
   private debugRole = "";
@@ -86,6 +90,8 @@ export class HostelRoom extends Room<GameState> {
     const fx = (msg: FxMessage) => this.broadcast(ServerMsg.Fx, msg);
     this.abilities = new AbilitySystem(this.state, this.roles, this.movement, this.combat, fx);
     this.gujju = new GujjuSystem(this.state, this.map, this.combat, fx);
+    this.chaos = new ChaosSystem(this.state, this.map, this.combat, fx);
+    this.chat = new ChatSystem(this.state, this.map);
     this.vents = new VentSystem(this.map, this.roles, this.movement, (msg) => this.broadcast(ServerMsg.VentPop, msg));
 
     this.setPatchRate(TICK_MS);
@@ -104,6 +110,7 @@ export class HostelRoom extends Room<GameState> {
     this.onMessage(ClientMsg.Ability, (client) => this.handleAbility(client));
     this.onMessage(ClientMsg.ReviveStart, (client) => this.handleReviveStart(client));
     this.onMessage(ClientMsg.ReviveCancel, (client) => this.abilities.reviveCancel(client.sessionId));
+    this.onMessage(ClientMsg.Chat, (client, msg: unknown) => this.handleChat(client, msg));
   }
 
   override onJoin(client: Client, options: Partial<JoinOptions> = {}): void {
@@ -127,6 +134,7 @@ export class HostelRoom extends Room<GameState> {
       const bots = Number(options.bots);
       if (Number.isInteger(bots) && bots > 0) this.debugBots = Math.min(MAX_PLAYERS, bots);
       this.debugRole = typeof options.role === "string" ? options.role : "";
+      if (typeof options.chaos === "string") this.chaos.setDebug(options.chaos);
       console.log(`[room] debug room: bots fill to ${this.debugBots}${this.debugRole ? `, host plays ${this.debugRole}` : ""}`);
     }
     console.log(`[room] ${player.name} joined (${this.state.players.size}/${MAX_PLAYERS})`);
@@ -163,6 +171,7 @@ export class HostelRoom extends Room<GameState> {
     this.vents.removePlayer(client.sessionId);
     this.tasks.removePlayer(client.sessionId);
     this.abilities.removePlayer(client.sessionId);
+    this.chat.removePlayer(client.sessionId);
     ensureHost(this.state);
     console.log(`[room] ${player.name} left (${this.state.players.size}/${MAX_PLAYERS})`);
   }
@@ -189,6 +198,7 @@ export class HostelRoom extends Room<GameState> {
     this.combat.tick(now);
     this.abilities.tick(now);
     this.gujju.tick(now);
+    this.chaos.tick(now);
     this.closeStaleTasks();
     // Deaths and disconnects change who counts towards the bar.
     this.tasks.updateProgress();
@@ -256,6 +266,14 @@ export class HostelRoom extends Room<GameState> {
       this.broadcast(ServerMsg.Fx, { kind: "wide", floor: player.floor, x: player.x, y: player.y, angle: this.movement.facing(player.id) } satisfies FxMessage);
     }
     this.sendCooldowns(client);
+  }
+
+  private handleChat(client: Client, msg: unknown): void {
+    const player = this.activePlayer(client);
+    if (!player || this.state.phase !== GamePhase.Playing) return;
+    const out = this.chat.say(player, msg, Date.now());
+    if (!out) return;
+    for (const id of out.to) this.clients.getById(id)?.send(ServerMsg.Chat, out.message);
   }
 
   private handleAbility(client: Client): void {
@@ -394,6 +412,7 @@ export class HostelRoom extends Room<GameState> {
       if (this.state.phase !== GamePhase.Reveal) return;
       this.state.phase = GamePhase.Playing;
       this.combat.startRound(Date.now());
+      this.chaos.startRound(Date.now());
       for (const c of this.clients) this.sendCooldowns(c);
     }, ROLE_REVEAL_SECONDS * 1000);
   }
@@ -403,6 +422,7 @@ export class HostelRoom extends Room<GameState> {
     this.ending = false;
     this.state.phase = GamePhase.Ended;
     this.abilities.reset();
+    this.chaos.stop();
     for (const c of this.clients) c.send(ServerMsg.TaskClose);
     this.vents.reset();
     const players = this.roles.ids().flatMap((id) => {
@@ -432,6 +452,7 @@ export class HostelRoom extends Room<GameState> {
     this.tasks.clear();
     this.abilities.reset();
     this.gujju.despawn();
+    this.chaos.stop();
     this.hiding.reset(this.state.players.values());
     this.state.bodies.clear();
     this.lastResults = null;

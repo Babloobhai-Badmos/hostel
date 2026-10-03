@@ -6,7 +6,8 @@
     "Doors: side N/S/E/W, 'at' = tile offset along that side (omit to centre). Each door is 2 tiles wide.",
     "label is what players see. Change it freely. id is what tasks.json and 'vents' refer to (as F<floor>:<id>).",
     "Furniture and hiding spots come from 'furniture' (per kind) and are placed by code; pieces that would block a door or cut a room in half are skipped.",
-    "Run `npm run map` to check the layout and print an ASCII preview of both floors."
+    "Run `npm run map` to check the layout and print an ASCII preview of both floors.",
+    "chatRooms: rooms where living players can chat with everyone else in the same room (Enter / the chat button)."
   ],
   "sizes": {
     "standard": [7, 6],
@@ -97,6 +98,7 @@
     ["F3:415", "F3:Terrace"]
   ],
   "spawn": { "room": "F2:Washroom", "cols": 5, "rows": 4 },
+  "chatRooms": ["F2:Lounge"],
   "lockers": {
     "_help": "Lockers (hiding spots) are placed along the walls of every corridor, one every 'spacing' tiles.",
     "spacing": 9

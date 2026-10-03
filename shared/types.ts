@@ -20,6 +20,8 @@ export const ClientMsg = {
   /** Supreme Leader started / stopped holding USE on a body. */
   ReviveStart: "reviveStart",
   ReviveCancel: "reviveCancel",
+  /** A chat line (only works inside a chat room, e.g. the Common Lounge). */
+  Chat: "chat",
 } as const;
 export type ClientMsg = (typeof ClientMsg)[keyof typeof ClientMsg];
 
@@ -46,6 +48,8 @@ export const ServerMsg = {
   TaskClose: "taskClose",
   /** Broadcast: an ability effect to draw (dash, wide swing, shield, beat drop, revive, gas). */
   Fx: "fx",
+  /** To players in the same chat room: someone said something. */
+  Chat: "chat",
 } as const;
 export type ServerMsg = (typeof ServerMsg)[keyof typeof ServerMsg];
 
@@ -75,6 +79,23 @@ export interface JoinOptions {
   bots?: number;
   /** Debug only: force your own character (?role=arch-semen). */
   role?: string;
+  /** Debug only: frequent chaos events, all kinds ("all") or just one (?chaos=warden). */
+  chaos?: string;
+}
+
+export const ChaosKind = {
+  None: "",
+  Warden: "warden",
+  LightsOut: "lights",
+  FoodFight: "foodfight",
+  PowerCut: "powercut",
+} as const;
+export type ChaosKind = (typeof ChaosKind)[keyof typeof ChaosKind];
+
+export interface ChatMessage {
+  fromId: string;
+  name: string;
+  text: string;
 }
 
 export interface RoleMessage {
@@ -111,7 +132,7 @@ export interface KillMessage {
   finisher: string;
 }
 
-export type FxKind = "dash" | "wide" | "shield" | "beat" | "revive" | "gas" | "gujju-awake";
+export type FxKind = "dash" | "wide" | "shield" | "beat" | "revive" | "gas" | "gujju-awake" | "warden-stun";
 
 export interface FxMessage {
   kind: FxKind;

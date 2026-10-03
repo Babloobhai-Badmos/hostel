@@ -4,6 +4,7 @@ import { Client, Room, getStateCallbacks } from "colyseus.js";
 import { RECONNECT_SECONDS, ROOM_NAME } from "../../shared/constants";
 import { ClientMsg, ServerMsg } from "../../shared/types";
 import type {
+  ChatMessage,
   CooldownMessage,
   FxMessage,
   JoinOptions,
@@ -45,10 +46,11 @@ export interface NetEvents {
   taskClose: null;
   taskList: TaskListMessage;
   fx: FxMessage;
+  chat: ChatMessage;
 }
 type EventHandler<K extends keyof NetEvents> = (msg: NetEvents[K]) => void;
 
-/** Debug options from the page URL: ?debug=1&bots=8&role=arch-semen */
+/** Debug options from the page URL: ?debug=1&bots=8&role=arch-semen&chaos=all */
 function debugOptionsFromUrl(): Partial<JoinOptions> {
   const q = new URLSearchParams(location.search);
   if (q.get("debug") !== "1") return {};
@@ -57,6 +59,7 @@ function debugOptionsFromUrl(): Partial<JoinOptions> {
     debug: true,
     ...(Number.isInteger(bots) && bots > 0 ? { bots } : {}),
     ...(q.get("role") ? { role: q.get("role")! } : {}),
+    ...(q.get("chaos") ? { chaos: q.get("chaos")! } : {}),
   };
 }
 
@@ -184,6 +187,7 @@ class Net {
     room.onMessage(ServerMsg.TaskOpen, (msg: TaskOpenMessage) => this.emit("taskOpen", msg));
     room.onMessage(ServerMsg.TaskClose, () => this.emit("taskClose", null));
     room.onMessage(ServerMsg.Fx, (msg: FxMessage) => this.emit("fx", msg));
+    room.onMessage(ServerMsg.Chat, (msg: ChatMessage) => this.emit("chat", msg));
     // Back in the lobby: forget last round's role and results.
     getStateCallbacks(room)(room.state).listen("phase", (phase) => {
       if (phase === "lobby") {

@@ -20,10 +20,13 @@ import {
   ATTACK_REACH_TOLERANCE_TILES,
   BASE_SPEED_PX_PER_SEC,
   DASH_SPEED_MULTIPLIER,
+  CHAT_BUBBLE_SECONDS,
   FOG_ALPHA,
   GHOST_SPEED_MULTIPLIER,
+  HEARING_RANGE_TILES,
   INPUT_SEND_MS,
   KILLER_VISION_MULTIPLIER,
+  LIGHTS_OUT_RADIUS_TILES,
   PLAYER_COLORS,
   PLAYER_RADIUS_PX,
   TICK_DT,
@@ -33,7 +36,10 @@ import {
   VISION_RADIUS_TILES,
   VISION_RAYS,
   VISION_WALL_PEEK_PX,
+  WARDEN_CONE_DEG,
+  WARDEN_CONE_TILES,
 } from "../../../shared/constants";
+import { sfx } from "../audio/synth";
 import { attackReachPx, pickAttackTarget } from "../../../shared/combat";
 import type { Combatant } from "../../../shared/combat";
 import { useTarget } from "../../../shared/interact";
@@ -46,7 +52,7 @@ import type { Body, Player } from "../../../server/schema/GameState";
 import { KeyboardControls } from "../input/keyboard";
 import { InterpolationBuffer } from "../render/interpolation";
 import { createFloorView } from "../render/mapRenderer";
-import { createCorpseView, createGujjuView, createPlayerView } from "../render/placeholderSprites";
+import { createCorpseView, createGujjuView, createPlayerView, createWardenView } from "../render/placeholderSprites";
 import type { PlayerView } from "../render/placeholderSprites";
 import {
   beatEffect,
@@ -56,10 +62,13 @@ import {
   reviveEffect,
   searchEffect,
   shieldEffect,
+  taskDoneEffect,
   ventPopEffect,
+  wardenStunEffect,
   wideSwingEffect,
 } from "../render/effects";
-import type { FxMessage } from "../../../shared/types";
+import { ChaosKind } from "../../../shared/types";
+import type { ChatMessage, FxMessage } from "../../../shared/types";
 import type { Gas, Npc } from "../../../server/schema/GameState";
 import { net } from "../net";
 import type { HUDScene } from "./HUD";
@@ -114,7 +123,23 @@ export class GameScene extends Phaser.Scene {
   /** victimId -> time of the kill message, so their body waits for the ragdoll. */
   private recentKills = new Map<string, number>();
   private localView: PlayerView | null = null;
-  private npcs = new Map<string, { view: ReturnType<typeof createGujjuView>; buffer: InterpolationBuffer; npc: Npc; pos: Vec2 }>();
+  private npcs = new Map<string, {
+    view: PlayerView;
+    /** Gujju Rapper's mood bubble. */
+    speech?: Phaser.GameObjects.Text;
+    /** Warden's flashlight (drawn above the fog so you can see it coming). */
+    cone?: Phaser.GameObjects.Graphics;
+    buffer: InterpolationBuffer;
+    npc: Npc;
+    pos: Vec2;
+  }>();
+  /** Power cut: dark flicker over door gaps. */
+  private powerCut!: Phaser.GameObjects.Graphics;
+  private nextBzzztAt = 0;
+  /** Chat bubbles over heads: playerId -> bubble. */
+  private chatBubbles = new Map<string, { text: Phaser.GameObjects.Text; until: number }>();
+  /** Task ids already done, to spot newly finished ones. */
+  private doneTasks = new Set<string>();
   private gasClouds = new Map<string, { obj: Phaser.GameObjects.Container; gas: Gas }>();
   /** Revive hold in progress (Supreme Leader): when it started, or 0. */
   reviveStartedAt = 0;
@@ -163,6 +188,9 @@ export class GameScene extends Phaser.Scene {
     this.keyboard = new KeyboardControls(this);
     this.npcs.clear();
     this.gasClouds.clear();
+    this.chatBubbles.clear();
+    this.doneTasks = new Set(net.tasks.tasks.filter((t) => t.done).map((t) => t.id));
+    this.powerCut = this.add.graphics().setDepth(FOG_DEPTH - 1);
     this.reviveStartedAt = 0;
     this.fog = this.add.graphics().setDepth(FOG_DEPTH);
     this.taskGlows.clear();
@@ -182,8 +210,24 @@ export class GameScene extends Phaser.Scene {
     this.bindRoom();
     this.cleanups.push(
       net.on("kill", (msg) => this.onKill(msg)),
-      net.on("ventPop", (msg) => msg.floor === this.currentFloor && ventPopEffect(this, msg.x, msg.y)),
-      net.on("search", (msg) => msg.floor === this.currentFloor && searchEffect(this, msg.x, msg.y, msg.found)),
+      net.on("ventPop", (msg) => {
+        if (msg.floor !== this.currentFloor) return;
+        ventPopEffect(this, msg.x, msg.y);
+        sfx.ventPop(this.earVolume(msg.floor, msg.x, msg.y));
+      }),
+      net.on("search", (msg) => {
+        if (msg.floor !== this.currentFloor) return;
+        searchEffect(this, msg.x, msg.y, msg.found);
+        sfx.knock(this.earVolume(msg.floor, msg.x, msg.y));
+      }),
+      net.on("chat", (msg) => this.onChat(msg)),
+      net.on("taskList", (list) => {
+        for (const t of list.tasks) {
+          if (!t.done || this.doneTasks.has(t.id)) continue;
+          this.doneTasks.add(t.id);
+          if (this.me) taskDoneEffect(this, this.display.x, this.display.y);
+        }
+      }),
       net.on("fx", (msg) => this.onFx(msg)),
       net.on("taskOpen", (msg) => {
         if (!MinigameScene.isOpen(this)) this.scene.launch("Minigame", msg);
@@ -302,19 +346,23 @@ export class GameScene extends Phaser.Scene {
         this.bodies.delete(id);
       }),
       $(room.state).npcs.onAdd((npc, id) => {
-        this.npcs.get(id)?.view.container.destroy();
-        const view = createGujjuView(this, npc.name);
+        this.removeNpc(id);
         const buffer = new InterpolationBuffer();
         buffer.reset(npc.x, npc.y);
-        view.container.setPosition(npc.x, npc.y).setVisible(false);
-        const entry = { view, buffer, npc, pos: { x: npc.x, y: npc.y } };
-        this.npcs.set(id, entry);
+        const pos = { x: npc.x, y: npc.y };
+        if (npc.kind === "warden") {
+          const view = createWardenView(this);
+          const cone = this.add.graphics().setDepth(FOG_DEPTH + 1);
+          this.npcs.set(id, { view, cone, buffer, npc, pos });
+          if (npc.floor === this.currentFloor) sfx.whistle(0.6);
+        } else {
+          const view = createGujjuView(this, npc.name);
+          this.npcs.set(id, { view, speech: view.speech, buffer, npc, pos });
+        }
+        this.npcs.get(id)!.view.container.setPosition(npc.x, npc.y).setVisible(false);
         this.cleanups.push($(npc).onChange(() => buffer.push(npc.x, npc.y)));
       }),
-      $(room.state).npcs.onRemove((_npc, id) => {
-        this.npcs.get(id)?.view.container.destroy();
-        this.npcs.delete(id);
-      }),
+      $(room.state).npcs.onRemove((_npc, id) => this.removeNpc(id)),
       $(room.state).gas.onAdd((gas, id) => {
         const puffs = [0, 1, 2, 3, 4, 5].map((i) => {
           const a = (i / 6) * Math.PI * 2;
@@ -368,9 +416,51 @@ export class GameScene extends Phaser.Scene {
     this.bodies.set(id, { container, body, landed: !waiting });
   }
 
+  private removeNpc(id: string): void {
+    const n = this.npcs.get(id);
+    n?.view.container.destroy();
+    n?.cone?.destroy();
+    this.npcs.delete(id);
+  }
+
+  /** 0..1 loudness of something happening at (x, y): silent on another floor or far away. */
+  earVolume(floor: number, x: number, y: number): number {
+    if (floor !== this.currentFloor) return 0;
+    const d = Math.hypot(x - this.display.x, y - this.display.y);
+    return Phaser.Math.Clamp(1 - d / (HEARING_RANGE_TILES * TILE_SIZE), 0, 1);
+  }
+
+  private onChat(msg: ChatMessage): void {
+    sfx.chat();
+    const view = msg.fromId === net.sessionId ? this.localView : this.remotes.get(msg.fromId)?.view;
+    if (!view) return;
+    this.chatBubbles.get(msg.fromId)?.text.destroy();
+    const text = this.add
+      .text(0, -PLAYER_RADIUS_PX - 34, msg.text, {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "11px",
+        color: "#000000",
+        backgroundColor: "#ffffff",
+        padding: { x: 5, y: 3 },
+        wordWrap: { width: 160 },
+        align: "center",
+      })
+      .setOrigin(0.5, 1)
+      .setResolution(2);
+    view.container.add(text);
+    this.chatBubbles.set(msg.fromId, { text, until: performance.now() + CHAT_BUBBLE_SECONDS * 1000 });
+  }
+
   private onKill(msg: KillMessage): void {
     this.recentKills.set(msg.victimId, performance.now());
-    if (msg.victimId === net.sessionId) this.cameras.main.shake(250, 0.01);
+    const vol = this.earVolume(msg.floor, msg.x, msg.y);
+    if (msg.victimId === net.sessionId) {
+      this.cameras.main.shake(300, 0.015);
+      navigator.vibrate?.([120, 60, 200]);
+    } else if (vol > 0.5) {
+      this.cameras.main.shake(180, 0.006 * vol);
+    }
+    if (vol > 0) (msg.finisher === "butt-crush" ? sfx.squish : msg.finisher === "gas" ? sfx.gas : sfx.thwack)(vol);
     if (msg.floor !== this.currentFloor) {
       this.markLanded(msg.victimId);
       return;
@@ -451,30 +541,46 @@ export class GameScene extends Phaser.Scene {
 
   private onFx(msg: FxMessage): void {
     if (msg.floor !== this.currentFloor) return;
+    const vol = this.earVolume(msg.floor, msg.x, msg.y);
     switch (msg.kind) {
       case "dash":
         dashEffect(this, msg.x, msg.y, msg.angle ?? 0);
+        sfx.whoosh(vol);
         break;
       case "wide": {
         const reach = attackReachPx(net.character?.attackRange ?? 1.5);
         wideSwingEffect(this, msg.x, msg.y, msg.angle ?? 0, reach);
+        sfx.whoosh(vol);
         break;
       }
       case "shield":
         shieldEffect(this, msg.x, msg.y);
+        sfx.shield(vol);
         break;
       case "beat":
         beatEffect(this, msg.x, msg.y, msg.radius ?? TILE_SIZE * 4);
-        if (this.me?.stunned) this.cameras.main.shake(300, 0.012);
+        sfx.beatDrop(Math.max(vol, 0.3));
+        if (this.me?.stunned) {
+          this.cameras.main.shake(300, 0.012);
+          navigator.vibrate?.(250);
+        }
         break;
       case "revive":
         reviveEffect(this, msg.x, msg.y);
+        sfx.revive(vol);
         break;
       case "gujju-awake":
         gujjuAwakeEffect(this, msg.x, msg.y);
+        sfx.alarm(vol * 0.6);
         break;
       case "gas":
+        sfx.gas(vol);
         break; // the cloud itself is drawn from the synced state
+      case "warden-stun":
+        wardenStunEffect(this, msg.x, msg.y);
+        sfx.whistle(vol);
+        if (this.me?.stunned) navigator.vibrate?.(200);
+        break;
     }
   }
 
@@ -585,7 +691,9 @@ export class GameScene extends Phaser.Scene {
     const me = this.me;
     if (!me || !me.alive || net.room?.state.phase === GamePhase.Ended) return null;
     const mult = net.isKiller ? KILLER_VISION_MULTIPLIER : 1;
-    return VISION_RADIUS_TILES * mult * TILE_SIZE;
+    const normal = VISION_RADIUS_TILES * mult;
+    const lightsOut = net.room?.state.chaos === ChaosKind.LightsOut;
+    return (lightsOut ? Math.min(normal, LIGHTS_OUT_RADIUS_TILES) : normal) * TILE_SIZE;
   }
 
   private updateVisibility(now: number): void {
@@ -638,14 +746,63 @@ export class GameScene extends Phaser.Scene {
     this.npcs.forEach((n) => {
       const sample = n.buffer.sample(now);
       if (sample) n.pos = sample;
-      const show = n.npc.floor === this.currentFloor && canSee(n.pos.x, n.pos.y);
+      const sameFloor = n.npc.floor === this.currentFloor;
+      const show = sameFloor && canSee(n.pos.x, n.pos.y);
       n.view.container.setVisible(show).setPosition(n.pos.x, n.pos.y).setDepth(n.pos.y);
-      n.view.speech.setText(GUJJU_SPEECH[n.npc.mood] ?? "");
+      n.speech?.setText(GUJJU_SPEECH[n.npc.mood] ?? "");
+      if (n.cone) this.drawWardenCone(n.cone, sameFloor, n.pos, n.npc.facing, grid);
     });
 
     this.gasClouds.forEach((g) => g.obj.setVisible(g.gas.floor === this.currentFloor));
 
+    // Chat bubbles fade out.
+    for (const [id, b] of this.chatBubbles) {
+      if (now < b.until) continue;
+      b.text.destroy();
+      this.chatBubbles.delete(id);
+    }
+
+    this.drawPowerCut(now, grid);
+
     this.drawFog(radius, grid);
+  }
+
+  /** The warden's flashlight: a yellow cone, stopped by walls, drawn above the fog. */
+  private drawWardenCone(g: Phaser.GameObjects.Graphics, show: boolean, pos: Vec2, facing: number, grid: Parameters<typeof castRay>[0]): void {
+    g.clear();
+    if (!show) return;
+    const reach = WARDEN_CONE_TILES * TILE_SIZE;
+    const half = ((WARDEN_CONE_DEG / 2) * Math.PI) / 180;
+    const steps = 16;
+    const pts: Vec2[] = [{ x: pos.x, y: pos.y }];
+    for (let i = 0; i <= steps; i++) {
+      const a = facing - half + (2 * half * i) / steps;
+      const d = castRay(grid, pos.x, pos.y, a, reach);
+      pts.push({ x: pos.x + Math.cos(a) * d, y: pos.y + Math.sin(a) * d });
+    }
+    g.fillStyle(0xfff3a0, 0.28);
+    g.fillPoints(pts, true);
+  }
+
+  /** Power cut: door gaps flicker dark, with a BZZZT now and then. */
+  private drawPowerCut(now: number, grid: Parameters<typeof castRay>[0]): void {
+    const g = this.powerCut;
+    g.clear();
+    if (net.room?.state.chaos !== ChaosKind.PowerCut) return;
+    if (now >= this.nextBzzztAt) {
+      sfx.bzzzt(0.8);
+      this.nextBzzztAt = now + 900 + Math.random() * 900;
+    }
+    const doors = hostelMap.floors.get(this.currentFloor)?.doors ?? [];
+    for (const d of doors) {
+      if (Math.random() < 0.5) continue;
+      g.fillStyle(0x000000, 0.85);
+      g.fillRect(d.x * grid.tileSize, d.y * grid.tileSize, grid.tileSize, grid.tileSize);
+      if (Math.random() < 0.15) {
+        g.fillStyle(0x7fdbff, 0.8);
+        g.fillRect(d.x * grid.tileSize + 8, d.y * grid.tileSize + 12, grid.tileSize - 16, 3);
+      }
+    }
   }
 
   /**

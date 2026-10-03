@@ -2,7 +2,7 @@
 
 A chaotic multiplayer top-down browser game for 1–20 friends on the same WiFi or hotspot. One laptop runs the server; everyone else opens a URL in their phone or laptop browser. Nothing to install on the phones.
 
-**Current status: Phase 5 (abilities).** Lobby, two generated hostel floors, secret roles with a reveal screen, killers with melee attacks and special abilities, the Gujju Rapper NPC in room 303, the Supreme Leader's revive and shield, bodies, ghosts, vision with line of sight, vents, hiding spots, tasks with 9 minigames, a crew progress bar and a results screen. Chaos events, audio polish and juice come in phase 7.
+**Current status: Phase 7 (all phases done).** Lobby, two generated hostel floors, secret roles with a reveal screen, killers with melee attacks and special abilities, the Gujju Rapper NPC, the Supreme Leader's revive and shield, bodies, ghosts, vision with line of sight, vents, hiding spots, tasks with 9 minigames, chaos events (warden patrol, lights out, food fight, power cut), Common Lounge chat, synth sound effects, screen shake and phone vibration, and a results screen. There are no meetings or voting (by design).
 
 ## Requirements
 
@@ -68,6 +68,7 @@ It prints an `https://<random-words>.trycloudflare.com` URL. Send that to everyo
 | Attack (killers) | ATTACK button (lights up when someone is in reach) | Space |
 | Ability (DASH / WIDE / GAS / SHIELD) | ABILITY button (shows a cooldown ring) | Q |
 | Revive a body (Supreme Leader) | HOLD the USE button (it says REVIVE) for 3 s | hold E |
+| Chat (only in the Common Lounge) | 💬 CHAT button at the top | Enter |
 | Look at the other floor's map | Tap the minimap | M |
 
 - **Stairs:** walk onto the yellow-striped stairs and press USE to go to the matching stairs on the other floor. You only see players on your own floor.
@@ -108,6 +109,27 @@ Stunned players can't move or act, but can still be killed. Shielded players sho
 
 All numbers live in `shared/characters.json` (cooldowns, gas radius, stun radius/length, shield length) and `shared/constants.ts` (dash speed, wide-swing arc, Gujju's reaction time, ranges).
 
+## Chaos events
+
+Every 60–90 seconds something happens, one at a time, with a siren and a banner:
+
+| Event | What happens | How long |
+| --- | --- | --- |
+| 🔦 Warden patrol | A Warden walks the corridors of the busiest floor. His yellow flashlight cone shows through the dark. Anyone it catches (killers too) is frozen for 3 s. | 20 s |
+| 💡 Lights out | Everyone can only see 2 tiles around them. | 15 s |
+| 🍛 Food fight | Purely for fun: a banner and food flying across everyone's screen. | 8 s |
+| ⚡ Power cut | Door gaps flicker black, BZZZT. Cosmetic only. | 10 s |
+
+No event ever kills anyone. Timings are in `shared/constants.ts`. To try them quickly the host can add `&chaos=all` (or `&chaos=warden`, `lights`, `foodfight`, `powercut`) to a debug URL, and events then come every 12 seconds.
+
+## Chat
+
+Living players standing in the **Common Lounge** can talk to everyone else in the lounge (press Enter, or tap 💬 CHAT). Messages show as bubbles over heads and in a small log; nobody outside the lounge sees them. 80 characters per message, one message every 1.5 s. Which rooms allow chat is set by `chatRooms` in `shared/layout.json`.
+
+## Sound and juice
+
+All sounds are generated in the browser (WebAudio), no audio files: THWACK on kills, pops for vents, whooshes, the beat drop, a siren for chaos events, BZZZT, the warden's whistle, chimes for tasks and revives. World sounds get quieter with distance and you don't hear other floors. Kills nearby shake the screen, finished tasks float a "TASK DONE ✓", and phones vibrate when you're killed, stunned or warned. The Gujju Rapper's voice lines use the phone's built-in text-to-speech voice.
+
 ## Tasks
 
 Each regular Hosteller gets 6 of the 9 tasks below at random (listed top-left with the room and floor). Your unfinished stations pulse yellow on the map and show as yellow dots on the minimap. Walk up to one and press USE to open its minigame. You're still standing in the hostel while you play, so killers can get you; walking away or dying closes it.
@@ -138,6 +160,7 @@ A round needs 5 players. To test with fewer, the **host** opens the game with `?
 http://localhost:3000/?debug=1                       # fill up to 5 players with bots
 http://localhost:3000/?debug=1&bots=12               # fill up to 12
 http://localhost:3000/?debug=1&role=arch-semen       # and make the host Arch-Semen
+http://localhost:3000/?debug=1&chaos=all             # chaos events every 12 s
 ```
 
 `role` takes any id from `shared/characters.json` (`arch-semen`, `kallu-koli`, `mota-dalla`, `laal-jhanda`, `supreme-leader`, `regular`). Debug options only count when the first person to join the room uses them. Bots don't play minigames; each living bot ticks off one of its tasks every 25 seconds so the progress bar still moves.
@@ -189,9 +212,9 @@ It prints server update rate (should stay ~20/s) and the worst gap between updat
 | `npm run build` | Build the client into `dist/client` |
 | `npm run typecheck` | TypeScript strict check of everything |
 | `npm run map` | Validate `layout.json` and print both floors as ASCII |
-| `npm run selftest` | With the server running: scripted rounds (each in its own room) that check tasks (wrong place, too fast, never opened), hiding, searching, vents, spawn protection, ghosts, speed limits, and every ability incl. the Gujju Rapper and revive. `npm run selftest -- - gujju` runs one scenario (core, dash, wide, gas, gujju). |
+| `npm run selftest` | With the server running: scripted rounds (each in its own room) that check tasks (wrong place, too fast, never opened), hiding, searching, vents, spawn protection, ghosts, speed limits, and every ability incl. the Gujju Rapper and revive. `npm run selftest -- - gujju` runs one scenario (core, dash, wide, gas, gujju, chaos, chat). |
 | `npm run tunnel` | Print tunnel fallback instructions |
-| `npm run sim -- [count] [seconds] [url]` | Headless bot load test |
+| `npm run sim -- [count] [seconds] [url]` | Headless load test: simulated players join, start a round and wander |
 
 Use another port with `PORT=3001 npm start` (on Windows PowerShell: `$env:PORT=3001; npm start`).
 

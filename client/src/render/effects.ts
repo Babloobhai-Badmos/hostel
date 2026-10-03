@@ -215,6 +215,16 @@ export function reviveEffect(scene: Phaser.Scene, x: number, y: number): void {
   popText(scene, x, y - 30, "REVIVED!", "#ffe066", 22);
 }
 
+/** The warden's flashlight caught someone. */
+export function wardenStunEffect(scene: Phaser.Scene, x: number, y: number): void {
+  popText(scene, x, y - 30, "HALT!! 🔦", "#7fdbff", 20);
+}
+
+/** Your task got ticked off: a little "+1" above your head. */
+export function taskDoneEffect(scene: Phaser.Scene, x: number, y: number): void {
+  popText(scene, x, y - 34, "TASK DONE ✓", "#9be564", 16);
+}
+
 export function gujjuAwakeEffect(scene: Phaser.Scene, x: number, y: number): void {
   popText(scene, x, y - 46, "KAUN HAI BEY?!", "#ff4d4d", 20);
 }

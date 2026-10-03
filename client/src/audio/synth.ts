@@ -1,5 +1,6 @@
-// Tiny WebAudio synth: every sound is generated, no audio files. Phase 7
-// adds more (thwack, vent pop, alarms); the minigames use these now.
+// Tiny WebAudio synth: every sound is generated, no audio files.
+// Every sfx takes an optional volume (0..1) so world sounds can fade with
+// distance (see HEARING_RANGE_TILES).
 
 let ctx: AudioContext | null = null;
 const MASTER_VOLUME = 0.25;
@@ -52,20 +53,60 @@ export function noise(ms: number, filterHz: number, volume = 1): void {
 }
 
 export const sfx = {
-  ding: () => {
-    tone(880, 180, "sine", 0.8);
-    setTimeout(() => tone(1320, 260, "sine", 0.7), 90);
+  ding: (v = 1) => {
+    tone(880, 180, "sine", 0.8 * v);
+    setTimeout(() => tone(1320, 260, "sine", 0.7 * v), 90);
   },
-  buzz: () => tone(140, 220, "square", 0.5, 90),
-  click: () => tone(1200, 40, "square", 0.3),
-  womp: () => tone(220, 260, "sawtooth", 0.6, 60),
-  knock: () => noise(70, 600, 1.4),
-  chomp: () => {
-    noise(60, 1800, 0.8);
-    tone(300, 60, "square", 0.3, 180);
+  buzz: (v = 1) => tone(140, 220, "square", 0.5 * v, 90),
+  click: (v = 1) => tone(1200, 40, "square", 0.3 * v),
+  womp: (v = 1) => tone(220, 260, "sawtooth", 0.6 * v, 60),
+  knock: (v = 1) => noise(70, 600, 1.4 * v),
+  chomp: (v = 1) => {
+    noise(60, 1800, 0.8 * v);
+    tone(300, 60, "square", 0.3 * v, 180);
   },
-  splash: () => noise(350, 2500, 0.7),
-  success: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 160, "triangle", 0.7), i * 90)),
+  splash: (v = 1) => noise(350, 2500, 0.7 * v),
+  success: (v = 1) => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 160, "triangle", 0.7 * v), i * 90)),
+  /** Kill: a meaty smack. */
+  thwack: (v = 1) => {
+    noise(120, 900, 2 * v);
+    tone(160, 180, "square", 0.6 * v, 50);
+  },
+  ventPop: (v = 1) => {
+    tone(600, 90, "sine", 0.8 * v, 1400);
+    noise(80, 3000, 0.4 * v);
+  },
+  whoosh: (v = 1) => noise(250, 4000, 0.8 * v),
+  gas: (v = 1) => noise(900, 700, 0.6 * v),
+  shield: (v = 1) => [880, 1175, 1568].forEach((f, i) => setTimeout(() => tone(f, 300, "sine", 0.4 * v), i * 60)),
+  beatDrop: (v = 1) => {
+    tone(110, 600, "sawtooth", 1.2 * v, 40);
+    noise(200, 300, 1.5 * v);
+  },
+  revive: (v = 1) => [392, 523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 220, "sine", 0.6 * v), i * 110)),
+  squish: (v = 1) => {
+    tone(90, 300, "sawtooth", 0.8 * v, 45);
+    noise(200, 500, 1.2 * v);
+  },
+  /** Chaos event siren (two-tone, like the meeting alarm). */
+  alarm: (v = 1) => {
+    for (let i = 0; i < 4; i++) setTimeout(() => tone(i % 2 ? 660 : 880, 220, "square", 0.45 * v), i * 230);
+  },
+  /** Power cut. */
+  bzzzt: (v = 1) => {
+    tone(60, 500, "sawtooth", 0.9 * v);
+    tone(120, 500, "square", 0.4 * v);
+  },
+  /** Warden's whistle. */
+  whistle: (v = 1) => {
+    tone(2600, 160, "sine", 0.6 * v, 2900);
+    setTimeout(() => tone(2600, 260, "sine", 0.6 * v, 2400), 180);
+  },
+  /** Food fight crowd + splats. */
+  foodFight: (v = 1) => {
+    for (let i = 0; i < 6; i++) setTimeout(() => noise(90, 1200 + Math.random() * 2000, 0.6 * v), i * 140);
+  },
+  chat: (v = 1) => tone(1400, 60, "sine", 0.35 * v),
 };
 
 /** Say a line with the browser's built-in voice (no audio files). Silently does nothing if unsupported. */

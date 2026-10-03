@@ -64,6 +64,7 @@ export interface LayoutDef {
   stairs: [string, string][];
   vents: [string, string][];
   spawn: { room: string; cols: number; rows: number };
+  chatRooms?: string[];
   lockers: { spacing: number };
   furniture: Record<string, FurnitureDef[] | string>;
 }
@@ -155,6 +156,8 @@ export interface FloorMap {
   vents: Vent[];
   stairs: Stair[];
   tasks: TaskStation[];
+  /** Door-gap tiles (the cut-out wall tiles), for the power-cut flicker. */
+  doors: Vec2[];
 }
 
 export interface HostelMap {
@@ -166,6 +169,8 @@ export interface HostelMap {
   vents: Map<string, Vent>;
   hides: Map<string, HideSpot>;
   tasks: Map<string, TaskStation>;
+  /** Area keys where living players can chat (layout.json "chatRooms"). */
+  chatRooms: string[];
 }
 
 export class MapError extends Error {
@@ -202,6 +207,7 @@ class FloorBuilder {
   readonly areas: Area[] = [];
   readonly furniture: Furniture[] = [];
   readonly hides: HideSpot[] = [];
+  readonly doors: Vec2[] = [];
   private roomDefs = new Map<string, RoomDef & { w: number; h: number }>();
 
   constructor(readonly def: FloorDef, private layout: LayoutDef) {
@@ -314,6 +320,7 @@ class FloorBuilder {
         );
       }
       const wi = this.idx(wx, wy);
+      this.doors.push({ x: wx, y: wy });
       this.solid[wi] = 0;
       this.areaIndex[wi] = index;
       // Keep the tiles just inside and outside the doorway clear of furniture.
@@ -605,6 +612,7 @@ export function buildHostelMap(layout: LayoutDef, tasks: TaskDef[]): HostelMap {
       vents: [...vents.values()].filter((v) => v.floor === id),
       stairs: [...stairs.values()].filter((s) => s.floor === id),
       tasks: [...taskStations.values()].filter((t) => t.floor === id),
+      doors: b.doors,
     });
   }
 
@@ -617,6 +625,7 @@ export function buildHostelMap(layout: LayoutDef, tasks: TaskDef[]): HostelMap {
     vents,
     hides,
     tasks: taskStations,
+    chatRooms: (layout.chatRooms ?? []).map((ref) => findArea(ref).area.key),
   };
 }
 

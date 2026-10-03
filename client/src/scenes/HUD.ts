@@ -5,6 +5,7 @@
 
 import Phaser from "phaser";
 import {
+  CHAT_MAX_LENGTH,
   GUJJU_REACT_SECONDS,
   KILL_FEED_SECONDS,
   MAX_PLAYERS,
@@ -13,7 +14,8 @@ import {
   TILE_SIZE,
   VENT_COOLDOWN_SECONDS,
 } from "../../../shared/constants";
-import { GamePhase } from "../../../shared/types";
+import { ChaosKind, ClientMsg, GamePhase } from "../../../shared/types";
+import { sfx } from "../audio/synth";
 import type { KillMessage } from "../../../shared/types";
 import type { CharacterDef } from "../../../shared/characters";
 import { areaAt } from "../../../shared/buildMap";
@@ -37,6 +39,18 @@ const MINIMAP_TASK_COLOR = 0xffe066;
 const MINIMAP_TASK_RADIUS = 2.5;
 
 const FEED_MAX_LINES = 4;
+const CHAT_LOG_LINES = 4;
+const CHAT_LOG_SECONDS = 10;
+/** Big banner when a chaos event starts. */
+const CHAOS_BANNER_MS = 3000;
+const CHAOS_TEXT: Record<string, [string, string]> = {
+  warden: ["🔦 WARDEN PATROL!", "Stay out of his flashlight or you'll be frozen."],
+  lights: ["💡 LIGHTS OUT!", "You can barely see a thing…"],
+  foodfight: ["🍛 FOOD FIGHT IN THE MESS!", "Laddus everywhere!"],
+  powercut: ["⚡ POWER CUT!", "BZZZT. The doors are flickering."],
+};
+/** Food fight: one flying laddu every this many ms. */
+const FOOD_FIGHT_SPAWN_MS = 90;
 const TASK_FONT_PX = 11;
 /** Crew progress bar width as a fraction of the screen width, and its height. */
 const PROGRESS_WIDTH_FRAC = 0.32;
@@ -112,6 +126,14 @@ export class HUDScene extends Phaser.Scene {
   private revealBody!: Phaser.GameObjects.Text;
   private cleanups: (() => void)[] = [];
   private taskList!: Phaser.GameObjects.Text;
+  private chaosBanner!: Phaser.GameObjects.Text;
+  private chaosBannerUntil = 0;
+  private lastChaos = "";
+  private nextFoodAt = 0;
+  private chatButton!: Phaser.GameObjects.Text;
+  private chatLog!: Phaser.GameObjects.Text;
+  private chatLines: { text: string; until: number }[] = [];
+  private enterKey: Phaser.Input.Keyboard.Key | undefined;
   private minimapTasks!: Phaser.GameObjects.Graphics;
   private progress!: Phaser.GameObjects.Graphics;
   private progressLabel!: Phaser.GameObjects.Text;
@@ -166,7 +188,28 @@ export class HUDScene extends Phaser.Scene {
     this.minimapTasks = this.add.graphics();
     this.progressLabel = this.add.text(0, 0, "", { ...textStyle(TASK_FONT_PX), fontStyle: "bold" }).setOrigin(0.5);
 
+    this.chaosBanner = this.add
+      .text(0, 0, "", { ...textStyle(26), fontStyle: "bold", align: "center", color: "#ffe066" })
+      .setOrigin(0.5)
+      .setDepth(5000)
+      .setVisible(false);
+    this.lastChaos = net.room?.state.chaos ?? "";
+    this.chatButton = this.add
+      .text(0, 0, "💬 CHAT", { ...textStyle(16), fontStyle: "bold", backgroundColor: "#2e86de", padding: { x: 12, y: 6 } })
+      .setOrigin(0.5, 0)
+      .setInteractive({ useHandCursor: true })
+      .setVisible(false);
+    this.chatButton.on(Phaser.Input.Events.GAMEOBJECT_POINTER_DOWN, () => this.openChat());
+    this.chatLog = this.add.text(MARGIN_PX, 0, "", { ...textStyle(13), backgroundColor: "#00000066", padding: { x: 6, y: 4 } }).setOrigin(0, 1);
+    this.chatLines = [];
+    this.enterKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+    this.bindChatBox();
+
     this.cleanups = [
+      net.on("chat", (msg) => {
+        this.chatLines.push({ text: `${msg.name}: ${msg.text}`, until: performance.now() + CHAT_LOG_SECONDS * 1000 });
+        if (this.chatLines.length > CHAT_LOG_LINES) this.chatLines.shift();
+      }),
       net.on("taskList", () => this.renderTaskList()),
       net.on("kill", (msg) => this.onKill(msg)),
       net.on("error", (text) => this.pushFeed(text)),
@@ -200,6 +243,114 @@ export class HUDScene extends Phaser.Scene {
     }
     const me = net.room?.state.players.get(net.sessionId);
     this.pushFeed(me && !me.alive ? `${msg.victimName} was eliminated` : "Someone was eliminated");
+  }
+
+  // ---------- Chat ----------
+
+  private chatBoxCleanup: (() => void) | null = null;
+
+  private bindChatBox(): void {
+    const box = document.getElementById("chat-box")!;
+    const input = document.getElementById("chat-input") as HTMLInputElement;
+    const send = document.getElementById("chat-send")!;
+    input.maxLength = CHAT_MAX_LENGTH;
+    const submit = () => {
+      const text = input.value.trim();
+      if (text) net.room?.send(ClientMsg.Chat, { text });
+      this.closeChat();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      e.stopPropagation();
+      if (e.key === "Enter") submit();
+      else if (e.key === "Escape") this.closeChat();
+    };
+    const onSend = (e: Event) => {
+      e.preventDefault();
+      submit();
+    };
+    input.addEventListener("keydown", onKey);
+    send.addEventListener("pointerdown", onSend);
+    this.chatBoxCleanup = () => {
+      input.removeEventListener("keydown", onKey);
+      send.removeEventListener("pointerdown", onSend);
+      box.classList.remove("show");
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.closeChat();
+      this.chatBoxCleanup?.();
+    });
+  }
+
+  /** In a chat room, alive, round running. */
+  private canChat(): boolean {
+    const game = this.scene.get("Game") as GameScene | undefined;
+    const me = game?.localState;
+    if (!me || !me.alive || net.room?.state.phase !== GamePhase.Playing) return false;
+    const floor = hostelMap.floors.get(me.floor);
+    const area = floor ? areaAt(floor, me.x, me.y) : null;
+    return !!area && hostelMap.chatRooms.includes(area.key);
+  }
+
+  private openChat(): void {
+    if (!this.canChat()) return;
+    const box = document.getElementById("chat-box")!;
+    const input = document.getElementById("chat-input") as HTMLInputElement;
+    // Let the text box have the keyboard (no moving while typing).
+    this.game.input.keyboard!.enabled = false;
+    box.classList.add("show");
+    input.value = "";
+    input.focus();
+  }
+
+  private closeChat(): void {
+    const box = document.getElementById("chat-box");
+    const input = document.getElementById("chat-input") as HTMLInputElement | null;
+    if (!box?.classList.contains("show")) return;
+    box.classList.remove("show");
+    input?.blur();
+    this.game.input.keyboard!.enabled = true;
+    this.scene.get("Game")?.input.keyboard?.resetKeys();
+    this.input.keyboard?.resetKeys();
+  }
+
+  /** Chaos: banner when an event starts, laddus flying during a food fight. */
+  private updateChaos(now: number): void {
+    const chaos = net.room?.state.chaos ?? "";
+    if (chaos !== this.lastChaos) {
+      this.lastChaos = chaos;
+      const text = CHAOS_TEXT[chaos];
+      if (text) {
+        this.chaosBanner.setText(`${text[0]}\n${text[1]}`).setVisible(true).setScale(0.3);
+        this.tweens.add({ targets: this.chaosBanner, scale: 1, duration: 300, ease: "Back.Out" });
+        this.chaosBannerUntil = now + CHAOS_BANNER_MS;
+        sfx.alarm(0.8);
+        if (chaos === ChaosKind.FoodFight) sfx.foodFight();
+        navigator.vibrate?.(100);
+      }
+    }
+    if (this.chaosBanner.visible && now > this.chaosBannerUntil) this.chaosBanner.setVisible(false);
+    if (chaos === ChaosKind.FoodFight && now >= this.nextFoodAt) {
+      this.nextFoodAt = now + FOOD_FIGHT_SPAWN_MS;
+      this.flingLaddu();
+    }
+  }
+
+  private flingLaddu(): void {
+    const { width, height } = this.scale;
+    const fromLeft = Math.random() < 0.5;
+    const y0 = Math.random() * height;
+    const food = this.add
+      .text(fromLeft ? -20 : width + 20, y0, Phaser.Math.RND.pick(["🟠", "🍛", "🥟", "🍩", "🟠"]), { fontSize: `${20 + Math.random() * 20}px` })
+      .setOrigin(0.5)
+      .setDepth(4000);
+    this.tweens.add({
+      targets: food,
+      x: fromLeft ? width + 40 : -40,
+      y: y0 + (Math.random() - 0.5) * height * 0.6,
+      angle: (Math.random() - 0.5) * 1080,
+      duration: 700 + Math.random() * 600,
+      onComplete: () => food.destroy(),
+    });
   }
 
   private renderTaskList(): void {
@@ -242,6 +393,9 @@ export class HUDScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.banner.setPosition(width / 2, height / 2);
     this.revealBg?.setSize(width, height);
+    this.chaosBanner?.setPosition(width / 2, height * 0.28).setWordWrapWidth(width * 0.8);
+    this.chatButton?.setPosition(width / 2, MARGIN_PX + PROGRESS_HEIGHT_PX + 10);
+    this.chatLog?.setY(height * 0.62);
     this.revealTitle?.setPosition(width / 2, height * 0.38);
     this.revealBody?.setPosition(width / 2, height * 0.38 + 40).setWordWrapWidth(Math.min(600, width - 40));
     this.prompt.setPosition(width / 2, height - MARGIN_PX);
@@ -269,6 +423,14 @@ export class HUDScene extends Phaser.Scene {
   }
 
   override update(): void {
+    const t0 = performance.now();
+    this.updateChaos(t0);
+    const chatOk = this.canChat();
+    this.chatButton.setVisible(chatOk && !MinigameScene.isOpen(this));
+    if (!chatOk) this.closeChat();
+    else if (this.enterKey && Phaser.Input.Keyboard.JustDown(this.enterKey)) this.openChat();
+    this.chatLines = this.chatLines.filter((l) => l.until > t0);
+    this.chatLog.setText(this.chatLines.map((l) => l.text).join("\n")).setVisible(this.chatLines.length > 0);
     this.touch?.setSuspended(MinigameScene.isOpen(this));
     this.touch?.draw();
     this.drawProgress();
@@ -335,6 +497,9 @@ export class HUDScene extends Phaser.Scene {
     }
     if (use) prompts.push(`${keyboard ? "[E] " : ""}${use.prompt}${useCooldown > 0 ? ` (${Math.ceil(useCooldown * (target?.kind === "vent" ? VENT_COOLDOWN_SECONDS : SEARCH_COOLDOWN_SECONDS))}s)` : ""}`);
     if (victim && keyboard) prompts.push(attackCd > 0 ? `Attack ready in ${Math.ceil(attackCd * (c?.attackCooldown ?? 0))}s` : "[Space] ATTACK");
+    const chaosNow = room.state.chaos;
+    if (chaosNow && CHAOS_TEXT[chaosNow]) prompts.push(CHAOS_TEXT[chaosNow][0]);
+    if (chatOk && keyboard) prompts.push("[Enter] chat");
     const protection = net.readyAt.protection - now;
     if (me.alive && protection > 0 && phase === GamePhase.Playing) prompts.push(`Spawn protection ${Math.ceil(protection / 1000)}s`);
     this.prompt.setText(prompts.join("   ·   "));

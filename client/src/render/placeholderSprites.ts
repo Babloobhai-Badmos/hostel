@@ -115,6 +115,18 @@ export function createGujjuView(scene: Phaser.Scene, name: string): PlayerView &
   return { ...view, speech };
 }
 
+/** The warden: a navy blob with a cap and a whistle. */
+export function createWardenView(scene: Phaser.Scene): PlayerView {
+  const view = createPlayerView(scene, "👮 WARDEN", 0x1f3a93, false);
+  view.label.setColor("#7fdbff");
+  const cap = scene.add.graphics();
+  cap.fillStyle(0x0b1a4a, 1);
+  cap.fillRect(-PLAYER_RADIUS_PX * 0.8, -PLAYER_RADIUS_PX - 2, PLAYER_RADIUS_PX * 1.6, 6);
+  cap.fillRect(-PLAYER_RADIUS_PX * 0.2, -PLAYER_RADIUS_PX - 2, PLAYER_RADIUS_PX * 1.2, 3);
+  view.container.addAt(cap, 3);
+  return view;
+}
+
 /** A body on the floor: blood pool, flattened tinted body, X-eyes and bare bum. */
 export function createCorpseView(scene: Phaser.Scene, color: number): Phaser.GameObjects.Container {
   const blood = scene.add.image(0, 2, TEX_BLOOD).setAngle(Phaser.Math.Between(0, 359));

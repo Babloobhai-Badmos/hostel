@@ -7,7 +7,11 @@
 
 import {
   BASE_SPEED_PX_PER_SEC,
+  CHAT_COOLDOWN_SECONDS,
+  CHAT_MAX_LENGTH,
+  CHAOS_DEBUG_SECONDS,
   INPUT_SEND_MS,
+  WARDEN_SECONDS,
   ROLE_REVEAL_SECONDS,
   SPAWN_PROTECTION_SECONDS,
   TASK_MIN_SECONDS,
@@ -18,7 +22,7 @@ import { hostelMap } from "../shared/world";
 import { ClientMsg, ServerMsg } from "../shared/types";
 import { DEFAULT_URL, TestClient, sleep } from "./testClient";
 
-// Usage: npm run selftest -- [url|-] [scenario]   (scenario: core | dash | wide | gas | gujju)
+// Usage: npm run selftest -- [url|-] [scenario]   (scenario: core | dash | wide | gas | gujju | chaos | chat)
 const url = process.argv[2] && process.argv[2] !== "-" ? process.argv[2] : DEFAULT_URL;
 let failures = 0;
 function check(name: string, ok: boolean, detail = ""): void {
@@ -31,9 +35,9 @@ function check(name: string, ok: boolean, detail = ""): void {
  * dealt a Hosteller (retries with a new room otherwise), bots up to 10 (so
  * the Gujju Rapper is in and one kill doesn't end the round).
  */
-async function setupRoom(hostRole: string, tries = 6): Promise<{ host: TestClient; crew: TestClient; startedAt: number } | null> {
+async function setupRoom(hostRole: string, tries = 6, extra: Record<string, unknown> = {}): Promise<{ host: TestClient; crew: TestClient; startedAt: number } | null> {
   for (let i = 0; i < tries; i++) {
-    const host = await new TestClient(url).join("TestHost", { debug: true, role: hostRole, bots: 10 });
+    const host = await new TestClient(url).join("TestHost", { debug: true, role: hostRole, bots: 10, ...extra });
     const crew = await new TestClient(url).join("TestCrew", {}, host.room.roomId);
     const startedAt = Date.now();
     host.send(ClientMsg.Start);
@@ -321,6 +325,74 @@ async function gujjuScenario(): Promise<void> {
   await crew.leave();
 }
 
+async function chaosScenario(): Promise<void> {
+  console.log("--- Chaos: warden patrol ---");
+  const setup = await setupRoom("regular", 6, { chaos: "warden" });
+  if (!setup) return check("chaos scenario set up", false);
+  const { host, crew, startedAt } = setup;
+  type St = { chaos: string; npcs: Map<string, { kind: string; x: number; y: number; floor: number; facing: number }> };
+  const state = () => host.room.state as St;
+  const warden = () => [...state().npcs.values()].find((n) => n.kind === "warden");
+  const deadline = startedAt + (ROLE_REVEAL_SECONDS + CHAOS_DEBUG_SECONDS + 3) * 1000;
+  while (Date.now() < deadline && state().chaos !== "warden") await sleep(200);
+  check("a chaos event starts on schedule", state().chaos === "warden", state().chaos || "none");
+  const w = warden();
+  check("the warden appears", !!w);
+  if (w) {
+    const start = { x: w.x, y: w.y };
+    await sleep(1500);
+    check("the warden patrols", Math.hypot(w.x - start.x, w.y - start.y) > TILE_SIZE, `${Math.round(Math.hypot(w.x - start.x, w.y - start.y))}px`);
+    // Step into his flashlight: aim for a spot just ahead of him, again and again.
+    let stunned = false;
+    const until = Date.now() + 14_000;
+    while (!stunned && Date.now() < until && crew.me.floor === w.floor) {
+      const ahead = { x: w.x + Math.cos(w.facing) * TILE_SIZE * 2, y: w.y + Math.sin(w.facing) * TILE_SIZE * 2 };
+      const walking = crew.walkTo(ahead, 1200);
+      for (let i = 0; i < 12 && !stunned; i++) {
+        if (crew.me.stunned) stunned = true;
+        await sleep(100);
+      }
+      await walking;
+      if (crew.me.stunned) stunned = true;
+    }
+    check("his flashlight stuns people it catches", stunned);
+  }
+  const endBy = startedAt + (ROLE_REVEAL_SECONDS + CHAOS_DEBUG_SECONDS + WARDEN_SECONDS + 3) * 1000;
+  while (Date.now() < endBy && state().chaos !== "") await sleep(250);
+  check("the event ends after its time", state().chaos === "");
+  check("the warden leaves", !warden());
+  await host.leave();
+  await crew.leave();
+}
+
+async function chatScenario(): Promise<void> {
+  console.log("--- Common Lounge chat ---");
+  const setup = await setupRoom("regular");
+  if (!setup) return check("chat scenario set up", false);
+  const { host, crew, startedAt } = setup;
+  await waitPlaying(startedAt);
+  host.send(ClientMsg.Chat, { text: "hello from the washroom" });
+  await sleep(300);
+  check("you can't chat outside the lounge", host.chats.length === 0 && crew.chats.length === 0);
+  const lounge = hostelMap.tasks.get("charge")!; // the phone-charging station is in the lounge
+  check("host walks into the lounge", await host.walkTo(lounge));
+  host.send(ClientMsg.Chat, { text: "anyone here?" });
+  await sleep(300);
+  check("nobody outside the lounge hears it", crew.chats.length === 0);
+  check("crew walks into the lounge", await crew.walkTo({ x: lounge.x + TILE_SIZE * 2, y: lounge.y }));
+  await sleep(CHAT_COOLDOWN_SECONDS * 1000);
+  host.send(ClientMsg.Chat, { text: "  kaun hai   killer? \u0007 " + "x".repeat(200) });
+  await sleep(300);
+  check("players in the lounge hear each other", crew.chats.length === 1 && host.chats.at(-1)?.text === crew.chats[0]?.text);
+  const got = crew.chats[0]?.text ?? "";
+  check("messages are cleaned and capped", got.startsWith("kaun hai killer?") && got.length <= CHAT_MAX_LENGTH && !got.includes("\u0007"));
+  host.send(ClientMsg.Chat, { text: "spam" });
+  await sleep(300);
+  check("chat is rate-limited", crew.chats.length === 1);
+  await host.leave();
+  await crew.leave();
+}
+
 async function main(): Promise<void> {
   console.log(`Self-test against ${url}\n`);
   const only = process.argv[3];
@@ -330,6 +402,8 @@ async function main(): Promise<void> {
     ["wide", wideScenario],
     ["gas", gasScenario],
     ["gujju", gujjuScenario],
+    ["chaos", chaosScenario],
+    ["chat", chatScenario],
   ];
   for (const [name, run] of scenarios) if (!only || only === name) await run();
   console.log(failures ? `\n${failures} check(s) failed.` : "\nAll checks passed.");
