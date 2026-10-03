@@ -61,14 +61,15 @@ export function spawnAssignments(state: GameState, spawns: Vec2[]): [Player, Vec
 
 /**
  * Keep the host valid: if the host left, hand it to the longest-connected
- * player still connected (MapSchema keeps insertion order = join order).
+ * person still connected (MapSchema keeps insertion order = join order).
+ * Debug bots never become host: they can't press Start or Play Again.
  */
-export function ensureHost(state: GameState): void {
+export function ensureHost(state: GameState, isBot: (id: string) => boolean = () => false): void {
   const current = state.players.get(state.hostId);
   if (current && current.connected) return;
   let next = "";
   state.players.forEach((p) => {
-    if (!next && p.connected) next = p.id;
+    if (!next && p.connected && !isBot(p.id)) next = p.id;
   });
   if (next) state.hostId = next;
   else if (!current) state.hostId = "";

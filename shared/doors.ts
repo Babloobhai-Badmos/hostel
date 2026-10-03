@@ -101,10 +101,17 @@ export function visibleAreas(floor: FloorMap, from: number, isClosed: (doorwayId
   return seen;
 }
 
-/** Pick DOOR_ROOM_FRACTION of the rooms at random; returns the ids of all their doorways. */
+/**
+ * Pick DOOR_ROOM_FRACTION of the rooms at random; returns the ids of all their
+ * doorways. Stairwells are left out: the whole stair room is the "take the
+ * stairs" zone, so a door there couldn't be opened from inside.
+ */
 export function pickDoorways(map: HostelMap, fraction: number, random: () => number = Math.random): string[] {
   const rooms = new Map<string, string[]>();
-  for (const d of map.doorways.values()) rooms.set(d.room, [...(rooms.get(d.room) ?? []), d.id]);
+  for (const d of map.doorways.values()) {
+    if (map.stairs.has(d.room)) continue;
+    rooms.set(d.room, [...(rooms.get(d.room) ?? []), d.id]);
+  }
   const keys = [...rooms.keys()];
   for (let i = keys.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));

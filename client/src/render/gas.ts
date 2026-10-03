@@ -65,6 +65,7 @@ export function createGasCloud(scene: Phaser.Scene, x: number, y: number, radius
   return {
     obj,
     destroy: () => {
+      scene.tweens.killTweensOf(puffs);
       scene.tweens.add({
         targets: obj,
         alpha: 0,

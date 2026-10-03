@@ -159,7 +159,7 @@ export class HostelRoom extends Room<GameState> {
     if (!player) return;
     player.connected = false;
     this.movement.clearQueue(client.sessionId);
-    ensureHost(this.state);
+    ensureHost(this.state, (id) => this.bots.isBot(id));
 
     if (!consented) {
       try {
@@ -169,7 +169,7 @@ export class HostelRoom extends Room<GameState> {
         // A reloaded page restarts its input sequence at 1.
         player.ack = 0;
         this.movement.addPlayer(client.sessionId);
-        ensureHost(this.state);
+        ensureHost(this.state, (id) => this.bots.isBot(id));
         console.log(`[room] ${player.name} reconnected`);
         return;
       } catch {
@@ -186,7 +186,7 @@ export class HostelRoom extends Room<GameState> {
     this.tasks.removePlayer(client.sessionId);
     this.abilities.removePlayer(client.sessionId);
     this.chat.removePlayer(client.sessionId);
-    ensureHost(this.state);
+    ensureHost(this.state, (id) => this.bots.isBot(id));
     console.log(`[room] ${player.name} left (${this.state.players.size}/${MAX_PLAYERS})`);
   }
 
@@ -221,7 +221,12 @@ export class HostelRoom extends Room<GameState> {
     const win = checkWin(this.state, this.roles, this.tasks);
     if (win) {
       this.ending = true;
-      this.clock.setTimeout(() => this.endRound(checkWin(this.state, this.roles, this.tasks) ?? win), ROUND_END_DELAY_MS);
+      this.clock.setTimeout(() => {
+        // Re-check: someone may have been revived or reconnected in the meantime.
+        const still = checkWin(this.state, this.roles, this.tasks);
+        if (still) this.endRound(still);
+        else this.ending = false;
+      }, ROUND_END_DELAY_MS);
     }
   }
 
@@ -332,6 +337,8 @@ export class HostelRoom extends Room<GameState> {
     if (!player || player.venting || player.stunned) return;
     const target = useTarget(this.map, this.actorFor(player));
     if (!target) return;
+    // In the lobby you can only wander (and take the stairs); after the round, nothing.
+    if (this.state.phase === GamePhase.Lobby ? target.kind !== "stairs" : this.state.phase !== GamePhase.Playing) return;
     const now = Date.now();
     switch (target.kind) {
       case "unhide":
@@ -350,7 +357,7 @@ export class HostelRoom extends Room<GameState> {
         const open = this.tasks.start(player, target.station, now);
         if (open) client.send(ServerMsg.TaskOpen, open);
         // Knocking in the Gujju Rapper's room wakes him up.
-        if (open && target.station.area === this.gujju.homeKey) this.gujju.onKnock(player, now);
+        if (open && player.alive && target.station.area === this.gujju.homeKey) this.gujju.onKnock(player, now);
         break;
       }
       case "door": {

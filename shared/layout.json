@@ -33,7 +33,7 @@
 
         { "id": "Washroom", "label": "Washroom", "kind": "washroom", "x": 5, "y": 12, "doors": [{ "side": "N", "at": 3 }, { "side": "S", "at": 3 }] },
         { "id": "Lounge", "label": "Common Lounge", "kind": "hub", "x": 14, "y": 12, "doors": [{ "side": "N" }, { "side": "E", "at": 4 }, { "side": "S", "at": 3 }] },
-        { "id": "304", "label": "304 Rangeen", "kind": "rangeen", "x": 33, "y": 12, "doors": [{ "side": "N", "at": 7 }, { "side": "W", "at": 4 }] },
+        { "id": "304", "label": "304 Rangeen", "kind": "rangeen", "x": 33, "y": 12, "doors": [{ "side": "N", "at": 7 }] },
         { "id": "Mess", "label": "Mess Hall", "kind": "mess", "x": 14, "y": 23, "w": 35, "h": 9, "doors": [{ "side": "S", "at": 16 }, { "side": "E", "at": 3 }] },
         { "id": "306", "label": "306", "kind": "standard", "x": 54, "y": 12, "doors": [{ "side": "W" }] },
         { "id": "307", "label": "307", "kind": "standard", "x": 54, "y": 19, "doors": [{ "side": "W" }] },

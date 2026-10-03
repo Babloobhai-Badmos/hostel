@@ -12,6 +12,9 @@ import { buzzPhone, sfx } from "../audio/synth";
 import { MINIGAMES } from "../minigames";
 import type { Minigame } from "../minigames/types";
 import { label } from "../minigames/ui";
+
+/** Name of the full-screen backdrop: minigames ignore it when checking what a touch landed on. */
+export const BACKDROP_NAME = "minigame-backdrop";
 import { net } from "../net";
 
 /** Fraction of the screen the panel leaves as a margin on each side. */
@@ -46,7 +49,7 @@ export class MinigameScene extends Phaser.Scene {
     const m = Math.min(width, height) * MARGIN_FRAC;
 
     // Backdrop eats every touch so nothing reaches the HUD below.
-    this.add.rectangle(0, 0, width, height, 0x000000, 0.75).setOrigin(0).setInteractive();
+    this.add.rectangle(0, 0, width, height, 0x000000, 0.75).setOrigin(0).setInteractive().setName(BACKDROP_NAME);
     const panel = new Phaser.Geom.Rectangle(m, m, width - m * 2, height - m * 2);
     const g = this.add.graphics();
     g.fillStyle(0x221d2e, 1);

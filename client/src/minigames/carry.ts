@@ -13,6 +13,7 @@
 import Phaser from "phaser";
 import { buzzPhone, sfx } from "../audio/synth";
 import type { MinigameFactory } from "./types";
+import { BACKDROP_NAME } from "../scenes/Minigame";
 import { COLORS, bigButton, label } from "./ui";
 
 const TUNING = {
@@ -107,8 +108,9 @@ export const carryGame: MinigameFactory = (ctx) => {
   }
 
   // --- Drag joystick (anywhere except buttons) ---
-  scene.input.on(Phaser.Input.Events.POINTER_DOWN, (p: Phaser.Input.Pointer, over: unknown[]) => {
-    if (over.length > 0) return;
+  scene.input.on(Phaser.Input.Events.POINTER_DOWN, (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+    // A touch on a button isn't a drag (the backdrop under everything doesn't count).
+    if (over.some((o) => o.name !== BACKDROP_NAME)) return;
     stickOrigin = { x: p.x, y: p.y };
   });
   scene.input.on(Phaser.Input.Events.POINTER_MOVE, (p: Phaser.Input.Pointer) => {

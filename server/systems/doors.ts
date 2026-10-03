@@ -1,7 +1,8 @@
 // Doors: at the start of each round DOOR_ROOM_FRACTION of the rooms get real
-// doors (all start open). Living players open and close them with USE. A door
-// can't shut on someone standing in the doorway. NPCs barge through: a closed
-// door they walk up to swings open.
+// doors (all start open; stairwells never get one). Living players open and
+// close them with USE. A door can't shut on someone standing in the doorway
+// or on a body lying there. The Gujju Rapper barges through: a closed door he
+// walks up to swings open.
 //
 // The open/closed state is in GameState.doors; the closed ones are solid in
 // this room's collision grids (see shared/doors.ts).
@@ -46,9 +47,13 @@ export class DoorSystem {
     return null;
   }
 
-  /** Open any closed door an NPC is walking into. Call every tick. */
+  /**
+   * The Gujju Rapper opens any closed door he walks up to. (The warden only
+   * patrols corridors, so he leaves doors alone.) Call every tick.
+   */
   bargeThrough(now: number): void {
     this.state.npcs.forEach((npc) => {
+      if (npc.kind !== "gujju") return;
       const floor = this.map.floors.get(npc.floor);
       if (!floor) return;
       const d = doorNear(floor, npc.x, npc.y, (id) => this.state.doors.get(id) === false, NPC_DOOR_BARGE_TILES);
@@ -58,7 +63,7 @@ export class DoorSystem {
     });
   }
 
-  /** Anyone solid (living, not tucked away) or an NPC standing in the doorway. */
+  /** Anyone solid (living, not tucked away), an NPC, or a body lying in the doorway (it may be revived). */
   private blocked(doorway: Doorway): boolean {
     const bodies: { x: number; y: number }[] = [];
     this.state.players.forEach((p) => {
@@ -66,6 +71,9 @@ export class DoorSystem {
     });
     this.state.npcs.forEach((n) => {
       if (n.floor === doorway.floor) bodies.push(n);
+    });
+    this.state.bodies.forEach((b) => {
+      if (b.floor === doorway.floor) bodies.push(b);
     });
     return doorwayBlocked(doorway, bodies, PLAYER_RADIUS_PX);
   }

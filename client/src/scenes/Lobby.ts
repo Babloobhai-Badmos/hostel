@@ -36,13 +36,17 @@ export class LobbyScene extends Phaser.Scene {
       this.bindRoom();
     };
 
+    let joining = false;
     const join = async () => {
+      // Enter auto-repeat or a double tap must not join twice (the first seat would become a ghost player).
+      if (joining || net.room) return;
       const name = nameInput.value.trim();
       if (!name) {
         errorEl.textContent = "Type a name first.";
         nameInput.focus();
         return;
       }
+      joining = true;
       joinBtn.disabled = true;
       errorEl.textContent = "";
       nameInput.blur();
@@ -52,11 +56,12 @@ export class LobbyScene extends Phaser.Scene {
       } catch (err) {
         errorEl.textContent = `Couldn't join: ${err instanceof Error ? err.message : String(err)}`;
       } finally {
+        joining = false;
         joinBtn.disabled = false;
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Enter") void join();
+      if (e.key === "Enter" && !e.repeat) void join();
     };
     const onJoinClick = () => void join();
     const onStartClick = () => net.room?.send(ClientMsg.Start);

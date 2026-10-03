@@ -174,14 +174,14 @@ export class TaskSystem {
     return stale;
   }
 
-  /** Recompute the crew progress bar: real tasks of living, connected regular players. */
+  /** Recompute the crew progress bar: real tasks of living regular players (including ones reconnecting). */
   updateProgress(): void {
     let done = 0;
     let total = 0;
     for (const [id, l] of this.lists) {
       if (l.fake) continue;
       const p = this.state.players.get(id);
-      if (!p || !p.alive || !p.connected) continue;
+      if (!p || !p.alive) continue;
       total += l.slots.length;
       done += l.slots.filter((s) => s.done).length;
     }
@@ -193,7 +193,7 @@ export class TaskSystem {
     let total = 0;
     for (const [id, l] of this.lists) {
       const p = this.state.players.get(id);
-      if (l.fake || !p || !p.alive || !p.connected) continue;
+      if (l.fake || !p || !p.alive) continue;
       total += l.slots.length;
       if (l.slots.some((s) => !s.done)) return false;
     }

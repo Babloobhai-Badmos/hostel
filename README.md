@@ -128,12 +128,13 @@ The map is painted when the game loads (no image files): wooden dorm floors, ter
 
 ## Doors
 
-Each round, 3 out of 4 rooms (picked at random) get real doors; the rest keep open doorways. All doors start open.
+Each round, 3 out of 4 rooms (picked at random) get real doors; the rest keep open doorways. Stairwells never get doors. All doors start open.
 
 - Walk up to a door and press USE (the button says OPEN or CLOSE). Anyone alive can open or close any door, killers too.
 - A closed door blocks walking, attacks and sight: from the corridor you can't see anything inside a closed room, and from inside you can't see out. Ghosts float through.
 - A door won't shut on someone standing in the doorway.
-- The warden and the Gujju Rapper barge through closed doors.
+- The Gujju Rapper barges through closed doors. The warden sticks to the corridors.
+- A door won't shut on a body lying in the doorway either (it might get revived).
 - Room choice, how close you need to be, and whether killers can see through closed doors (`KILLERS_SEE_THROUGH_DOORS`, off by default) are in `shared/constants.ts`.
 
 The camera is zoomed in to about two rooms and the corridor outside them (`VIEW_WIDTH_TILES`, `VIEW_MIN_HEIGHT_TILES`).

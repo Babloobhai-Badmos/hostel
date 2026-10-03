@@ -141,7 +141,7 @@ export const DOOR_ROOM_FRACTION = 0.75;
 export const DOOR_RANGE_TILES = 1.5;
 /** A door can't be toggled again this soon (stops open/close spam). */
 export const DOOR_TOGGLE_COOLDOWN_MS = 400;
-/** NPCs (warden, Gujju Rapper) barge through: closed doors this close to them swing open. */
+/** The Gujju Rapper barges through: closed doors this close to him swing open. */
 export const NPC_DOOR_BARGE_TILES = 1.2;
 
 // ---------- Vision ----------

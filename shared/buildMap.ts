@@ -362,6 +362,11 @@ class FloorBuilder {
         );
       }
       const wi = this.idx(wx, wy);
+      if (this.doorwayIndex[wi] >= 0) {
+        throw new MapError(
+          `F${this.def.id} room "${r.id}" door ${d.side} uses the same wall tiles as ${this.doorways[this.doorwayIndex[wi]].id}; list a shared door on one room only`,
+        );
+      }
       this.doors.push({ x: wx, y: wy });
       doorway.tiles.push({ x: wx, y: wy });
       this.doorwayIndex[wi] = this.doorways.length;

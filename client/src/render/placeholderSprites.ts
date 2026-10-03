@@ -206,7 +206,8 @@ export function createPlayerView(
     .text(0, m.headTop - LABEL_GAP_PX - LABEL_FONT_PX - 2, "💫 💫", { fontSize: `${LABEL_FONT_PX}px` })
     .setOrigin(0.5, 1)
     .setVisible(false);
-  scene.tweens.add({ targets: stars, angle: 360, duration: 900, repeat: -1 });
+  const spin = scene.tweens.add({ targets: stars, angle: 360, duration: 900, repeat: -1 });
+  stars.once(Phaser.GameObjects.Events.DESTROY, () => spin.remove());
   const art = rig ? rig.layers : [body];
   const container = scene.add.container(0, 0, [shadow, bubble, ...art, label, stars]);
   return { container, body, rig, label, bubble, stars };

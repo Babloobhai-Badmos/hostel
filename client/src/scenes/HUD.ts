@@ -317,7 +317,10 @@ export class HUDScene extends Phaser.Scene {
     if (!this.canChat()) return;
     const box = document.getElementById("chat-box")!;
     const input = document.getElementById("chat-input") as HTMLInputElement;
-    // Let the text box have the keyboard (no moving while typing).
+    // Let the text box have the keyboard (no moving while typing). Release
+    // held keys first: their key-up won't reach the game while it's disabled.
+    this.scene.get("Game")?.input.keyboard?.resetKeys();
+    this.input.keyboard?.resetKeys();
     this.game.input.keyboard!.enabled = false;
     box.classList.add("show");
     input.value = "";
@@ -451,7 +454,7 @@ export class HUDScene extends Phaser.Scene {
     const chatOk = this.canChat();
     this.chatButton.setVisible(chatOk && !MinigameScene.isOpen(this));
     if (!chatOk) this.closeChat();
-    else if (this.enterKey && Phaser.Input.Keyboard.JustDown(this.enterKey)) this.openChat();
+    else if (this.enterKey && Phaser.Input.Keyboard.JustDown(this.enterKey) && !MinigameScene.isOpen(this)) this.openChat();
     this.chatLines = this.chatLines.filter((l) => l.until > t0);
     this.chatLog.setText(this.chatLines.map((l) => l.text).join("\n")).setVisible(this.chatLines.length > 0);
     this.touch?.setSuspended(MinigameScene.isOpen(this));

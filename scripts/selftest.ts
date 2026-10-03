@@ -22,7 +22,7 @@ import { character } from "../shared/characters";
 import { hostelMap } from "../shared/world";
 import { areaAt } from "../shared/buildMap";
 import { doorwaySides } from "../shared/doors";
-import { hasLineOfSight } from "../shared/physics";
+import { castRay, hasLineOfSight } from "../shared/physics";
 import { ClientMsg, ServerMsg } from "../shared/types";
 import { DEFAULT_URL, TestClient, sleep } from "./testClient";
 
@@ -89,9 +89,10 @@ async function coreScenario(): Promise<void> {
   check("crew gets 6 real tasks", crew.tasks.tasks.length === 6 && !crew.tasks.fake, `${crew.tasks.tasks.length}, fake=${crew.tasks.fake}`);
   check("killer gets a fake task list", killer.tasks.fake && killer.tasks.tasks.length > 0);
   const doneCount = () => crew.tasks.tasks.filter((t) => t.done).length;
+  // Not the knock on 303: that wakes the Gujju Rapper, who'd interrupt the test.
   const station = crew.tasks.tasks
     .map((t) => hostelMap.tasks.get(t.id)!)
-    .filter((st) => st.floor === crew.me.floor)
+    .filter((st) => st.floor === crew.me.floor && st.taskId !== "knock")
     .sort((a, b) => Math.hypot(a.x - crew.me.x, a.y - crew.me.y) - Math.hypot(b.x - crew.me.x, b.y - crew.me.y))[0];
   crew.send(ClientMsg.TaskDone, { taskId: station.taskId });
   await sleep(300);
@@ -119,7 +120,7 @@ async function coreScenario(): Promise<void> {
   await sleep(200);
   check("a finished task can't be finished twice", doneCount() === 1);
   // Open another task, then walk away: the server closes it.
-  const other = crew.tasks.tasks.find((t) => !t.done && hostelMap.tasks.get(t.id)!.floor === crew.me.floor);
+  const other = crew.tasks.tasks.find((t) => !t.done && t.id !== "knock" && hostelMap.tasks.get(t.id)!.floor === crew.me.floor);
   if (other) {
     const st = hostelMap.tasks.get(other.id)!;
     await crew.walkTo(st);
@@ -185,13 +186,17 @@ async function coreScenario(): Promise<void> {
 
   // Attack cooldown: a swing straight after a kill does nothing (no one near anyway, so check server cooldown via a fresh victim is not possible here).
 
-  // Speed hack: flood inputs.
+  // Speed hack: flood inputs, in whichever direction has the most room to run.
   const fx = killer.me.x;
   const fy = killer.me.y;
-  for (let i = 0; i < 200; i++) killer.input(0, 1);
+  const killerGrid = hostelMap.floors.get(killer.me.floor)!.grid;
+  const runway = (a: number) => castRay(killerGrid, fx, fy, a, TILE_SIZE * 20);
+  const dir = [0, Math.PI / 2, Math.PI, -Math.PI / 2].sort((a, b) => runway(b) - runway(a))[0];
+  for (let i = 0; i < 200; i++) killer.input(Math.cos(dir), Math.sin(dir));
   await sleep(1000);
   const moved = Math.hypot(killer.me.x - fx, killer.me.y - fy);
-  const legit = BASE_SPEED_PX_PER_SEC * 1.2 * 1.2;
+  // Arch-Semen's speed for a second, plus the small input bank and tick timing. Unthrottled, 200 inputs would be ~1700 px.
+  const legit = BASE_SPEED_PX_PER_SEC * 1.2 * 1.5;
   check("flooding inputs can't beat the speed limit", moved <= legit, `${Math.round(moved)}px in 1s, limit ${Math.round(legit)}`);
 
   await killer.leave();
@@ -423,7 +428,7 @@ async function doorsScenario(): Promise<void> {
   if (!setup) return check("doors scenario set up", false);
   const { host, crew, startedAt } = setup;
   const doors = () => (crew.room.state as unknown as { doors: Map<string, boolean> }).doors;
-  const allRooms = new Set([...hostelMap.doorways.values()].map((d) => d.room)).size;
+  const allRooms = new Set([...hostelMap.doorways.values()].map((d) => d.room).filter((r) => !hostelMap.stairs.has(r))).size;
   const doorRooms = new Set([...doors().keys()].map((id) => hostelMap.doorways.get(id)!.room)).size;
   check("75% of the rooms get doors", doorRooms === Math.round(allRooms * DOOR_ROOM_FRACTION), `${doorRooms}/${allRooms}`);
   check("doors start open", doors().size > 0 && [...doors().values()].every((open) => open));
@@ -431,7 +436,16 @@ async function doorsScenario(): Promise<void> {
 
   const floor = hostelMap.floors.get(crew.me.floor)!;
   const dist = (d: { x: number; y: number }) => Math.hypot(d.x - crew.me.x, d.y - crew.me.y);
-  const candidates = floor.doorways.filter((d) => doors().has(d.id)).sort((a, b) => dist(a) - dist(b));
+  // Not the spawn room's doors: the bots crowd around them, and a door won't shut on anyone in the doorway.
+  const spawnRoom = areaAt(floor, hostelMap.spawns[0].x, hostelMap.spawns[0].y)?.key;
+  const candidates = floor.doorways.filter((d) => doors().has(d.id) && d.room !== spawnRoom).sort((a, b) => dist(a) - dist(b));
+  /** Press USE until the door is in the wanted state (a wandering bot may be in the doorway for a moment). */
+  const useUntil = async (who: TestClient, id: string, open: boolean) => {
+    for (let i = 0; i < 6 && doors().get(id) !== open; i++) {
+      who.send(ClientMsg.Use);
+      await sleep(500);
+    }
+  };
   let door = null;
   for (const d of candidates.slice(0, 5)) {
     if (await crew.walkTo(doorwaySides(floor, d).outside, 20_000)) {
@@ -442,9 +456,8 @@ async function doorsScenario(): Promise<void> {
   check("walks up to a door", !!door);
   if (door) {
     const { inside, outside } = doorwaySides(floor, door);
-    crew.send(ClientMsg.Use);
-    await sleep(300);
-    check("USE closes the door", doors().get(door.id) === false);
+    await useUntil(crew, door.id, false);
+    check("USE closes the door", doors().get(door.id) === false, `${door.id} ${crew.lastError}`);
     // Push straight at it for a second.
     const len = Math.hypot(inside.x - crew.me.x, inside.y - crew.me.y);
     for (let i = 0; i < 20; i++) {
@@ -462,9 +475,8 @@ async function doorsScenario(): Promise<void> {
     await sleep(500);
     check("a door won't shut on someone standing in the doorway", doors().get(door.id) === true);
     await crew.walkTo(inside, 5000);
-    host.send(ClientMsg.Use);
-    await sleep(300);
-    check("...and shuts once they're through", doors().get(door.id) === false);
+    await useUntil(host, door.id, false);
+    check("...and shuts once they're through", doors().get(door.id) === false, host.lastError);
   }
   await host.leave();
   await crew.leave();

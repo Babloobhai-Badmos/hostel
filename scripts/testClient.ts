@@ -33,6 +33,8 @@ export class TestClient {
   lastOpen: TaskOpenMessage | null = null;
   closes = 0;
   chats: { name: string; text: string }[] = [];
+  /** Last error message the server sent us. */
+  lastError = "";
   private seq = 0;
 
   /** Without `roomId`, creates a brand-new room so the test never lands in a real game. */
@@ -55,7 +57,8 @@ export class TestClient {
     $(this.room.state).doors.onAdd(applyDoor);
     $(this.room.state).doors.onChange(applyDoor);
     $(this.room.state).doors.onRemove((_open: boolean, id: string) => applyDoor(true, id));
-    for (const t of [ServerMsg.Cooldowns, ServerMsg.Kill, ServerMsg.VentPop, ServerMsg.Search, ServerMsg.Results, ServerMsg.Error, ServerMsg.Fx]) {
+    this.room.onMessage(ServerMsg.Error, (m: { message?: string }) => (this.lastError = m?.message ?? String(m)));
+    for (const t of [ServerMsg.Cooldowns, ServerMsg.Kill, ServerMsg.VentPop, ServerMsg.Search, ServerMsg.Results, ServerMsg.Fx]) {
       this.room.onMessage(t, () => {});
     }
     await sleep(200);

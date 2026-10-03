@@ -1,5 +1,6 @@
-// Win conditions (checked every tick while playing). Disconnected players
-// don't count as alive. The Gujju Rapper NPC isn't counted on either side.
+// Win conditions (checked every tick while playing). A player whose phone
+// dropped still counts while their slot is held for reconnection; once the
+// window runs out they're removed from the state. The Gujju Rapper NPC isn't counted on either side.
 //
 //   Crew wins:    every killer is dead or gone, or every living regular
 //                 player has finished all their tasks.
@@ -20,7 +21,7 @@ export function checkWin(state: GameState, roles: RoleSystem, tasks: TaskSystem)
   let others = 0;
   for (const id of roles.ids()) {
     const p = state.players.get(id);
-    if (!p || !p.connected || !p.alive) continue;
+    if (!p || !p.alive) continue;
     if (roles.isKiller(id)) killers++;
     else others++;
   }
