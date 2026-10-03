@@ -2,9 +2,10 @@
 // room, tracks private messages, and walks around the map like a player
 // holding the joystick (breadth-first search over walkable tiles).
 
-import { Client, Room } from "colyseus.js";
+import { Client, Room, getStateCallbacks } from "colyseus.js";
 import { BASE_SPEED_PX_PER_SEC, INPUT_SEND_MS, ROOM_NAME, SERVER_PORT, TICK_DT, TILE_SIZE } from "../shared/constants";
 import { hostelMap } from "../shared/world";
+import { setDoorClosed } from "../shared/doors";
 import { ClientMsg, ServerMsg } from "../shared/types";
 import type { RoleMessage, TaskListMessage, TaskOpenMessage, Vec2 } from "../shared/types";
 
@@ -43,6 +44,17 @@ export class TestClient {
     this.room.onMessage(ServerMsg.TaskOpen, (m: TaskOpenMessage) => (this.lastOpen = m));
     this.room.onMessage(ServerMsg.TaskClose, () => this.closes++);
     this.room.onMessage(ServerMsg.Chat, (m: { name: string; text: string }) => this.chats.push(m));
+    // Mirror the room's doors in our copy of the map, so walkTo() paths around closed ones.
+    // (Every client in this process shares that map: run one room's test at a time.)
+    for (const floor of hostelMap.floors.values()) for (const d of floor.doorways) setDoorClosed(floor, d, false);
+    const $ = getStateCallbacks(this.room);
+    const applyDoor = (open: boolean, id: string) => {
+      const d = hostelMap.doorways.get(id);
+      if (d) setDoorClosed(hostelMap.floors.get(d.floor)!, d, !open);
+    };
+    $(this.room.state).doors.onAdd(applyDoor);
+    $(this.room.state).doors.onChange(applyDoor);
+    $(this.room.state).doors.onRemove((_open: boolean, id: string) => applyDoor(true, id));
     for (const t of [ServerMsg.Cooldowns, ServerMsg.Kill, ServerMsg.VentPop, ServerMsg.Search, ServerMsg.Results, ServerMsg.Error, ServerMsg.Fx]) {
       this.room.onMessage(t, () => {});
     }

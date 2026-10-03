@@ -2,12 +2,13 @@
 // enable the button; the server calls the same code to validate the request.
 //
 // Priority: climb out > stairs > vent (killers) > body (Supreme Leader, revive)
-// > your task station > hiding spot.
+// > your task station > door (open / close) > hiding spot.
 // Near a hiding spot, crew HIDE and killers SEARCH. Ghosts can use stairs and
 // do their tasks (which no longer count).
 
 import { HIDE_RANGE_TILES, REVIVE_RANGE_TILES, TASK_RANGE_TILES, TILE_SIZE, VENT_RANGE_TILES } from "./constants";
-import type { FloorMap, HideSpot, HostelMap, Stair, TaskStation, Vent } from "./buildMap";
+import type { Doorway, FloorMap, HideSpot, HostelMap, Stair, TaskStation, Vent } from "./buildMap";
+import { doorNear } from "./doors";
 
 export type UseTarget =
   | { kind: "unhide" }
@@ -16,6 +17,7 @@ export type UseTarget =
   | { kind: "hide"; spot: HideSpot }
   | { kind: "search"; spot: HideSpot }
   | { kind: "task"; station: TaskStation }
+  | { kind: "door"; doorway: Doorway; open: boolean }
   | { kind: "revive"; body: BodyRef };
 
 export interface BodyRef {
@@ -37,6 +39,8 @@ export interface Actor {
   openTasks: readonly string[];
   /** Supreme Leader with a revive left: the bodies they could revive. Empty otherwise. */
   revivable: readonly BodyRef[];
+  /** Doors this round: doorway id -> open. */
+  doors: ReadonlyMap<string, boolean>;
 }
 
 /** The stairs whose zone contains this point, if any. */
@@ -93,6 +97,8 @@ export function useTarget(map: HostelMap, actor: Actor): UseTarget | null {
   const station = taskStationNear(floor, actor.x, actor.y, actor.openTasks);
   if (station) return { kind: "task", station };
   if (!actor.alive) return null;
+  const door = doorNear(floor, actor.x, actor.y, (id) => actor.doors.has(id));
+  if (door) return { kind: "door", doorway: door, open: actor.doors.get(door.id)! };
   const spot = hideSpotNear(floor, actor.x, actor.y);
   if (spot) return actor.isKiller ? { kind: "search", spot } : { kind: "hide", spot };
   return null;

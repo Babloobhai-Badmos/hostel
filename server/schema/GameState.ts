@@ -83,4 +83,6 @@ export class GameState extends Schema {
   @type({ map: Body }) bodies = new MapSchema<Body>();
   @type({ map: Npc }) npcs = new MapSchema<Npc>();
   @type({ map: Gas }) gas = new MapSchema<Gas>();
+  /** Doors this round: doorway id (see shared/doors.ts) -> open. Empty in the lobby. */
+  @type({ map: "boolean" }) doors = new MapSchema<boolean>();
 }

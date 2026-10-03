@@ -19,12 +19,14 @@ import { useTarget } from "../../shared/interact";
 import { ClientMsg, GamePhase, ServerMsg } from "../../shared/types";
 import type { CooldownMessage, ErrorMessage, FxMessage, JoinOptions, ResultsMessage } from "../../shared/types";
 import { TASKS, hostelMap } from "../../shared/world";
+import { withOwnGrids } from "../../shared/doors";
 import { GameState, Player } from "../schema/GameState";
 import { AbilitySystem } from "../systems/abilities";
 import { BotSystem } from "../systems/bots";
 import { ChaosSystem } from "../systems/chaos";
 import { ChatSystem } from "../systems/chat";
 import { CombatSystem } from "../systems/combat";
+import { DoorSystem } from "../systems/doors";
 import { GujjuSystem } from "../systems/gujju";
 import { HidingSystem } from "../systems/hiding";
 import {
@@ -49,7 +51,8 @@ import type { WinResult } from "../systems/win";
 export class HostelRoom extends Room<GameState> {
   override maxClients = MAX_PLAYERS;
 
-  private map = hostelMap;
+  /** Own collision grids: this room's doors open and close without touching other rooms. */
+  private map = withOwnGrids(hostelMap);
   private movement!: MovementSystem;
   private stairs!: StairSystem;
   private hiding!: HidingSystem;
@@ -62,6 +65,7 @@ export class HostelRoom extends Room<GameState> {
   private gujju!: GujjuSystem;
   private chaos!: ChaosSystem;
   private chat!: ChatSystem;
+  private doors!: DoorSystem;
   /** Debug settings from the host's join options. */
   private debugBots = DEBUG_DEFAULT_BOT_FILL;
   private debugRole = "";
@@ -93,6 +97,7 @@ export class HostelRoom extends Room<GameState> {
     this.gujju = new GujjuSystem(this.state, this.map, this.combat, fx);
     this.chaos = new ChaosSystem(this.state, this.map, this.combat, fx);
     this.chat = new ChatSystem(this.state, this.map);
+    this.doors = new DoorSystem(this.state, this.map);
     this.vents = new VentSystem(this.map, this.roles, this.movement, (msg) => this.broadcast(ServerMsg.VentPop, msg));
 
     this.setPatchRate(TICK_MS);
@@ -203,6 +208,7 @@ export class HostelRoom extends Room<GameState> {
       this.movement.tick(p, this.moveModeOf(p, playing), this.speedOf(p));
     });
     if (!playing) return;
+    this.doors.bargeThrough(now);
     this.combat.tick(now);
     this.abilities.tick(now);
     this.gujju.tick(now);
@@ -313,6 +319,7 @@ export class HostelRoom extends Room<GameState> {
       canVent: playing && !!c?.canVent,
       openTasks: playing ? this.tasks.openTaskIds(player.id) : [],
       revivable,
+      doors: this.state.doors,
     };
   }
 
@@ -341,6 +348,11 @@ export class HostelRoom extends Room<GameState> {
         if (open) client.send(ServerMsg.TaskOpen, open);
         // Knocking in the Gujju Rapper's room wakes him up.
         if (open && target.station.area === this.gujju.homeKey) this.gujju.onKnock(player, now);
+        break;
+      }
+      case "door": {
+        const error = this.doors.toggle(target.doorway, now);
+        if (error) this.sendError(client, error);
         break;
       }
       case "revive":
@@ -400,6 +412,7 @@ export class HostelRoom extends Room<GameState> {
     else this.gujju.despawn();
     this.hiding.reset(this.state.players.values());
     this.vents.reset();
+    this.doors.setupRound();
     this.state.bodies.clear();
     this.lastResults = null;
     for (const [p, s] of spawnAssignments(this.state, this.map.spawns)) {
@@ -461,6 +474,7 @@ export class HostelRoom extends Room<GameState> {
     this.abilities.reset();
     this.gujju.despawn();
     this.chaos.stop();
+    this.doors.clear();
     this.hiding.reset(this.state.players.values());
     this.state.bodies.clear();
     this.lastResults = null;

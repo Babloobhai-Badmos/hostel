@@ -134,13 +134,26 @@ export const PLAYER_COLORS: readonly number[] = [
   0xaaffc3, 0x808000, 0xffd8b1, 0x000075, 0xffffff,
 ];
 
+// ---------- Doors ----------
+/** This share of the rooms get real doors each round (picked at random); the rest keep open doorways. */
+export const DOOR_ROOM_FRACTION = 0.75;
+/** How close (to the middle of the doorway) you must be to open or close a door. */
+export const DOOR_RANGE_TILES = 1.5;
+/** A door can't be toggled again this soon (stops open/close spam). */
+export const DOOR_TOGGLE_COOLDOWN_MS = 400;
+/** NPCs (warden, Gujju Rapper) barge through: closed doors this close to them swing open. */
+export const NPC_DOOR_BARGE_TILES = 1.2;
+
 // ---------- Vision ----------
-/** Living crew see this far. */
-export const VISION_RADIUS_TILES = 6;
-/** Killers see this fraction of the crew radius. */
-export const KILLER_VISION_MULTIPLIER = 0.5;
-/** During the lights-out event everyone's radius drops to this (phase 7). */
-export const LIGHTS_OUT_RADIUS_TILES = 2;
+// Lights on: you see every room and corridor connected to where you are,
+// as far as your screen goes. A closed door hides everything behind it.
+// Lights out (chaos event): crew see LIGHTS_OUT_FRONT_TILES ahead of them
+// and LIGHTS_OUT_BACK_TILES behind, blocked by walls and closed doors.
+// Killers always get the lights-on view.
+export const LIGHTS_OUT_FRONT_TILES = 8;
+export const LIGHTS_OUT_BACK_TILES = 4;
+/** true: killers also see inside rooms behind closed doors. */
+export const KILLERS_SEE_THROUGH_DOORS = false;
 /** Rays cast per frame to build the vision shape. More = smoother edges, more CPU. */
 export const VISION_RAYS = 240;
 /** Rays go this far past the point where they hit a wall, so wall faces are lit. */
@@ -216,10 +229,10 @@ export const BLINK_MAX_MS = 5000;
 export const BLINK_MS = 140;
 
 // ---------- Client view ----------
-/** The camera zooms so roughly this many tiles fit across the screen on any device. */
-export const VIEW_WIDTH_TILES = 22;
-/** ...but never fewer than this many tiles vertically (keeps phones in landscape fair). */
-export const VIEW_MIN_HEIGHT_TILES = 11;
+/** The camera zooms so roughly this many tiles fit across the screen (about two rooms side by side)... */
+export const VIEW_WIDTH_TILES = 16;
+/** ...but never fewer than this many tiles vertically (a room plus the corridor outside it). */
+export const VIEW_MIN_HEIGHT_TILES = 9;
 
 // ---------- Touch controls ----------
 /** Joystick radius as a fraction of the screen height. */

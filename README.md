@@ -2,7 +2,7 @@
 
 A chaotic multiplayer top-down browser game for 1–20 friends on the same WiFi or hotspot. One laptop runs the server; everyone else opens a URL in their phone or laptop browser. Nothing to install on the phones.
 
-**Current status: Phase 7 (all phases done).** Lobby, two generated hostel floors, secret roles with a reveal screen, killers with melee attacks and special abilities, the Gujju Rapper NPC, the Supreme Leader's revive and shield, bodies, ghosts, vision with line of sight, vents, hiding spots, tasks with 9 minigames, chaos events (warden patrol, lights out, food fight, power cut), Common Lounge chat, synth sound effects, screen shake and phone vibration, and a results screen. There are no meetings or voting (by design).
+**Current status: Phase 7 (all phases done).** Lobby, two generated hostel floors, secret roles with a reveal screen, killers with melee attacks and special abilities, the Gujju Rapper NPC, the Supreme Leader's revive and shield, bodies, ghosts, doors, room-by-room vision, vents, hiding spots, tasks with 9 minigames, chaos events (warden patrol, lights out, food fight, power cut), Common Lounge chat, synth sound effects, screen shake and phone vibration, and a results screen. There are no meetings or voting (by design).
 
 ## Requirements
 
@@ -64,7 +64,7 @@ It prints an `https://<random-words>.trycloudflare.com` URL. Send that to everyo
 | | Phone | Laptop |
 | --- | --- | --- |
 | Move | Left thumb anywhere on the left half (floating joystick) | WASD / arrow keys |
-| Use (stairs, hide, climb out, vent, search) | USE button (lights up and relabels when something is in reach) | E |
+| Use (stairs, doors, hide, climb out, vent, search) | USE button (lights up and relabels when something is in reach) | E |
 | Attack (killers) | ATTACK button (lights up when someone is in reach) | Space |
 | Ability (DASH / WIDE / GAS / SHIELD) | ABILITY button (shows a cooldown ring) | Q |
 | Revive a body (Supreme Leader) | HOLD the USE button (it says REVIVE) for 3 s | hold E |
@@ -89,7 +89,7 @@ Everyone else is a regular Hosteller. Killers all look exactly like everyone els
 - **Killing:** killers press ATTACK to hit the closest player in front of them within their range, then wait out their cooldown (15 s). Killers can't hurt each other. Nobody can be killed in the first 5 seconds (spawn protection, shown as a blue bubble).
 - **Bodies** stay where they fell for the whole round (unless the Supreme Leader revives them).
 - **Ghosts:** dead players float through walls, see everything, and are invisible to the living.
-- **Vision:** the living see 6 tiles around them; killers see half that. Walls and solid furniture block sight.
+- **Vision:** with the lights on you see everything on your screen except rooms behind closed doors (see Doors). Killers always see that much, even when the lights go out.
 - **Vents:** killers can jump into a grate and pop out of the paired one, maybe on the other floor (8 s cooldown).
 - **Winning:** crew wins when every killer is dead or has left, or when every living Hosteller has finished their tasks. Killers win when everyone else is dead, or killers are at least as many as everyone else alive.
 
@@ -116,11 +116,23 @@ Every 60–90 seconds something happens, one at a time, with a siren and a banne
 | Event | What happens | How long |
 | --- | --- | --- |
 | 🔦 Warden patrol | A Warden walks the corridors of the busiest floor. His yellow flashlight cone shows through the dark. Anyone it catches (killers too) is frozen for 3 s. | 20 s |
-| 💡 Lights out | Everyone can only see 2 tiles around them. | 15 s |
+| 💡 Lights out | The crew see only 8 tiles ahead of them and 4 behind (walls and closed doors still block). Killers still see everything. | 15 s |
 | 🍛 Food fight | Purely for fun: a banner and food flying across everyone's screen. | 8 s |
 | ⚡ Power cut | Door gaps flicker black, BZZZT. Cosmetic only. | 10 s |
 
 No event ever kills anyone. Timings are in `shared/constants.ts`. To try them quickly the host can add `&chaos=all` (or `&chaos=warden`, `lights`, `foodfight`, `powercut`) to a debug URL, and events then come every 12 seconds.
+
+## Doors
+
+Each round, 3 out of 4 rooms (picked at random) get real doors; the rest keep open doorways. All doors start open.
+
+- Walk up to a door and press USE (the button says OPEN or CLOSE). Anyone alive can open or close any door, killers too.
+- A closed door blocks walking, attacks and sight: from the corridor you can't see anything inside a closed room, and from inside you can't see out. Ghosts float through.
+- A door won't shut on someone standing in the doorway.
+- The warden and the Gujju Rapper barge through closed doors.
+- Room choice, how close you need to be, and whether killers can see through closed doors (`KILLERS_SEE_THROUGH_DOORS`, off by default) are in `shared/constants.ts`.
+
+The camera is zoomed in to about two rooms and the corridor outside them (`VIEW_WIDTH_TILES`, `VIEW_MIN_HEIGHT_TILES`).
 
 ## Face photos
 
@@ -194,7 +206,7 @@ Everything comes from `shared/layout.json` (rooms, doors, stairs, vents, spawn, 
 3. On your phone, open the LAN URL (for example `http://192.168.1.42:3000`), turn it sideways, type a name and tap **Join**. Both devices now list both players.
 4. With fewer than 5 people, open the laptop page as `http://localhost:3000/?debug=1&role=arch-semen` **before** anyone else joins (see Testing alone).
 5. On the laptop, press **START**. Each device shows its role for 4 seconds, then everyone is in the Floor 2 Washroom.
-6. Walk around. You only see what's in your vision circle. The yellow name is you.
+6. Walk around. Rooms behind closed doors are dark. The yellow name is you.
 7. As the killer (laptop): after the 5-second spawn protection, walk up to the phone player, face them and press Space. THWACK. The phone becomes a ghost and a body stays on the floor.
 8. Try hiding in a locker on the phone, then search it from the laptop with E.
 9. Reconnect test: lock the phone or reload the page, then come back within 30 seconds. You get your slot (and role) back.
@@ -221,7 +233,7 @@ It prints server update rate (should stay ~20/s) and the worst gap between updat
 | `npm run build` | Build the client into `dist/client` |
 | `npm run typecheck` | TypeScript strict check of everything |
 | `npm run map` | Validate `layout.json` and print both floors as ASCII |
-| `npm run selftest` | With the server running: scripted rounds (each in its own room) that check tasks (wrong place, too fast, never opened), hiding, searching, vents, spawn protection, ghosts, speed limits, and every ability incl. the Gujju Rapper and revive. `npm run selftest -- - gujju` runs one scenario (core, dash, wide, gas, gujju, chaos, chat). |
+| `npm run selftest` | With the server running: scripted rounds (each in its own room) that check tasks (wrong place, too fast, never opened), hiding, searching, vents, spawn protection, ghosts, speed limits, and every ability incl. the Gujju Rapper and revive, and doors. `npm run selftest -- - gujju` runs one scenario (core, dash, wide, gas, gujju, chaos, chat, doors). |
 | `npm run tunnel` | Print tunnel fallback instructions |
 | `npm run sim -- [count] [seconds] [url]` | Headless load test: simulated players join, start a round and wander |
 

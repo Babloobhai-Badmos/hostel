@@ -77,6 +77,12 @@ export const sfx = {
     noise(80, 3000, 0.4 * v);
   },
   whoosh: (v = 1) => noise(250, 4000, 0.8 * v),
+  /** Door: a creak opening, a thud shutting. */
+  doorOpen: (v = 1) => tone(320, 260, "sawtooth", 0.25 * v, 520),
+  doorShut: (v = 1) => {
+    noise(90, 500, 1.6 * v);
+    tone(110, 120, "square", 0.4 * v, 70);
+  },
   gas: (v = 1) => noise(900, 700, 0.6 * v),
   shield: (v = 1) => [880, 1175, 1568].forEach((f, i) => setTimeout(() => tone(f, 300, "sine", 0.4 * v), i * 60)),
   beatDrop: (v = 1) => {

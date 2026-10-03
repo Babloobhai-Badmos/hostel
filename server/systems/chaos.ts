@@ -4,7 +4,7 @@
 //   warden     a Warden NPC patrols the corridors of the busiest floor for
 //              WARDEN_SECONDS. Anyone caught in his flashlight cone (killers
 //              too) is stunned for WARDEN_STUN_SECONDS.
-//   lights     everyone's vision shrinks to LIGHTS_OUT_RADIUS_TILES (client side).
+//   lights     crew see only LIGHTS_OUT_FRONT/BACK_TILES ahead/behind (client side); killers unaffected.
 //   foodfight  purely visual: banner and laddus flying across the screen.
 //   powercut   door gaps flicker and BZZZT (purely cosmetic).
 //

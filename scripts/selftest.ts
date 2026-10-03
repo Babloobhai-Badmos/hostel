@@ -10,6 +10,7 @@ import {
   CHAT_COOLDOWN_SECONDS,
   CHAT_MAX_LENGTH,
   CHAOS_DEBUG_SECONDS,
+  DOOR_ROOM_FRACTION,
   INPUT_SEND_MS,
   WARDEN_SECONDS,
   ROLE_REVEAL_SECONDS,
@@ -19,10 +20,12 @@ import {
 } from "../shared/constants";
 import { character } from "../shared/characters";
 import { hostelMap } from "../shared/world";
+import { areaAt } from "../shared/buildMap";
+import { doorwaySides } from "../shared/doors";
 import { ClientMsg, ServerMsg } from "../shared/types";
 import { DEFAULT_URL, TestClient, sleep } from "./testClient";
 
-// Usage: npm run selftest -- [url|-] [scenario]   (scenario: core | dash | wide | gas | gujju | chaos | chat)
+// Usage: npm run selftest -- [url|-] [scenario]   (scenario: core | dash | wide | gas | gujju | chaos | chat | doors)
 const url = process.argv[2] && process.argv[2] !== "-" ? process.argv[2] : DEFAULT_URL;
 let failures = 0;
 function check(name: string, ok: boolean, detail = ""): void {
@@ -393,6 +396,60 @@ async function chatScenario(): Promise<void> {
   await crew.leave();
 }
 
+async function doorsScenario(): Promise<void> {
+  console.log("--- Doors ---");
+  // 6 players: 2 killers, so the round doesn't end on the spot (killers >= everyone else).
+  const setup = await setupRoom("supreme-leader", 8, { bots: 6 });
+  if (!setup) return check("doors scenario set up", false);
+  const { host, crew, startedAt } = setup;
+  const doors = () => (crew.room.state as unknown as { doors: Map<string, boolean> }).doors;
+  const allRooms = new Set([...hostelMap.doorways.values()].map((d) => d.room)).size;
+  const doorRooms = new Set([...doors().keys()].map((id) => hostelMap.doorways.get(id)!.room)).size;
+  check("75% of the rooms get doors", doorRooms === Math.round(allRooms * DOOR_ROOM_FRACTION), `${doorRooms}/${allRooms}`);
+  check("doors start open", doors().size > 0 && [...doors().values()].every((open) => open));
+  await waitPlaying(startedAt);
+
+  const floor = hostelMap.floors.get(crew.me.floor)!;
+  const dist = (d: { x: number; y: number }) => Math.hypot(d.x - crew.me.x, d.y - crew.me.y);
+  const candidates = floor.doorways.filter((d) => doors().has(d.id)).sort((a, b) => dist(a) - dist(b));
+  let door = null;
+  for (const d of candidates.slice(0, 5)) {
+    if (await crew.walkTo(doorwaySides(floor, d).outside, 20_000)) {
+      door = d;
+      break;
+    }
+  }
+  check("walks up to a door", !!door);
+  if (door) {
+    const { inside, outside } = doorwaySides(floor, door);
+    crew.send(ClientMsg.Use);
+    await sleep(300);
+    check("USE closes the door", doors().get(door.id) === false);
+    // Push straight at it for a second.
+    const len = Math.hypot(inside.x - crew.me.x, inside.y - crew.me.y);
+    for (let i = 0; i < 20; i++) {
+      crew.input((inside.x - crew.me.x) / len, (inside.y - crew.me.y) / len);
+      await sleep(INPUT_SEND_MS);
+    }
+    await sleep(200);
+    check("a closed door blocks the way", areaAt(floor, crew.me.x, crew.me.y)?.key !== door.room);
+    crew.send(ClientMsg.Use);
+    await sleep(500);
+    check("USE opens it again", doors().get(door.id) === true);
+    await crew.walkTo({ x: door.x, y: door.y }, 5000);
+    await host.walkTo(outside, 30_000);
+    host.send(ClientMsg.Use);
+    await sleep(500);
+    check("a door won't shut on someone standing in the doorway", doors().get(door.id) === true);
+    await crew.walkTo(inside, 5000);
+    host.send(ClientMsg.Use);
+    await sleep(300);
+    check("...and shuts once they're through", doors().get(door.id) === false);
+  }
+  await host.leave();
+  await crew.leave();
+}
+
 async function main(): Promise<void> {
   console.log(`Self-test against ${url}\n`);
   const only = process.argv[3];
@@ -404,6 +461,7 @@ async function main(): Promise<void> {
     ["gujju", gujjuScenario],
     ["chaos", chaosScenario],
     ["chat", chatScenario],
+    ["doors", doorsScenario],
   ];
   for (const [name, run] of scenarios) if (!only || only === name) await run();
   console.log(failures ? `\n${failures} check(s) failed.` : "\nAll checks passed.");

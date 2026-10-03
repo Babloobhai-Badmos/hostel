@@ -144,6 +144,30 @@ export interface TaskStation {
   y: number;
 }
 
+/** A doorway cut in a room's wall (DOOR_WIDTH_TILES wide). Some get real doors each round. */
+export interface Doorway {
+  /** Unique across the map, e.g. "F2:303:d0". */
+  id: string;
+  floor: number;
+  /** Area key of the room it belongs to. */
+  room: string;
+  /** The wall tiles that were cut out. */
+  tiles: Vec2[];
+  /** Pixel centre of the gap. */
+  x: number;
+  y: number;
+  /** true when the gap runs left-right (a door in a north or south wall). */
+  horizontal: boolean;
+}
+
+/** Two areas that touch. Through a doorway, or directly (e.g. corridors meeting). */
+export interface AreaLink {
+  a: number;
+  b: number;
+  /** Doorway id when they only meet through a doorway. */
+  doorway: string | null;
+}
+
 export interface FloorMap {
   id: number;
   name: string;
@@ -158,6 +182,11 @@ export interface FloorMap {
   tasks: TaskStation[];
   /** Door-gap tiles (the cut-out wall tiles), for the power-cut flicker. */
   doors: Vec2[];
+  doorways: Doorway[];
+  /** Per tile: index into `doorways`, or -1. */
+  doorwayIndex: Int16Array;
+  /** Which areas touch which (for "what can I see from here"). */
+  links: AreaLink[];
 }
 
 export interface HostelMap {
@@ -169,6 +198,7 @@ export interface HostelMap {
   vents: Map<string, Vent>;
   hides: Map<string, HideSpot>;
   tasks: Map<string, TaskStation>;
+  doorways: Map<string, Doorway>;
   /** Area keys where living players can chat (layout.json "chatRooms"). */
   chatRooms: string[];
 }
@@ -208,6 +238,8 @@ class FloorBuilder {
   readonly furniture: Furniture[] = [];
   readonly hides: HideSpot[] = [];
   readonly doors: Vec2[] = [];
+  readonly doorways: Doorway[] = [];
+  readonly doorwayIndex: Int16Array;
   private roomDefs = new Map<string, RoomDef & { w: number; h: number }>();
 
   constructor(readonly def: FloorDef, private layout: LayoutDef) {
@@ -217,6 +249,7 @@ class FloorBuilder {
     this.solid = new Uint8Array(n).fill(1);
     this.areaIndex = new Int16Array(n).fill(-1);
     this.reserved = new Uint8Array(n);
+    this.doorwayIndex = new Int16Array(n).fill(-1);
   }
 
   idx(x: number, y: number): number {
@@ -262,7 +295,7 @@ class FloorBuilder {
     for (const r of this.roomDefs.values()) {
       const doors = r.doors ?? [];
       if (doors.length === 0) throw new MapError(`F${f.id} room "${r.id}" has no doors`);
-      for (const d of doors) this.cutDoor(r, d);
+      doors.forEach((d, i) => this.cutDoor(r, d, i));
     }
     // 4. Furniture + hiding spots.
     for (const r of this.roomDefs.values()) this.furnish(r);
@@ -289,7 +322,7 @@ class FloorBuilder {
   }
 
   /** Cut a DOOR_WIDTH_TILES gap in the wall on one side and check it leads somewhere. */
-  private cutDoor(r: RoomDef & { w: number; h: number }, d: DoorDef): void {
+  private cutDoor(r: RoomDef & { w: number; h: number }, d: DoorDef, n: number): void {
     const horizontal = d.side === "N" || d.side === "S";
     const length = horizontal ? r.w : r.h;
     const at = d.at ?? Math.floor((length - DOOR_WIDTH_TILES) / 2);
@@ -297,6 +330,15 @@ class FloorBuilder {
       throw new MapError(`F${this.def.id} room "${r.id}" door ${d.side} at ${at} doesn't fit on a side of length ${length}`);
     }
     const index = this.areas.findIndex((a) => a.id === r.id);
+    const doorway: Doorway = {
+      id: `F${this.def.id}:${r.id}:d${n}`,
+      floor: this.def.id,
+      room: this.areas[index].key,
+      tiles: [],
+      x: 0,
+      y: 0,
+      horizontal,
+    };
     for (let k = 0; k < DOOR_WIDTH_TILES; k++) {
       let wx: number, wy: number, ox: number, oy: number, ix: number, iy: number;
       if (horizontal) {
@@ -321,6 +363,8 @@ class FloorBuilder {
       }
       const wi = this.idx(wx, wy);
       this.doors.push({ x: wx, y: wy });
+      doorway.tiles.push({ x: wx, y: wy });
+      this.doorwayIndex[wi] = this.doorways.length;
       this.solid[wi] = 0;
       this.areaIndex[wi] = index;
       // Keep the tiles just inside and outside the doorway clear of furniture.
@@ -328,6 +372,32 @@ class FloorBuilder {
       this.reserved[this.idx(ix, iy)] = 1;
       this.reserved[this.idx(ox, oy)] = 1;
     }
+    doorway.x = (doorway.tiles.reduce((sum, t) => sum + t.x, 0) / doorway.tiles.length + 0.5) * TILE_SIZE;
+    doorway.y = (doorway.tiles.reduce((sum, t) => sum + t.y, 0) / doorway.tiles.length + 0.5) * TILE_SIZE;
+    this.doorways.push(doorway);
+  }
+
+  /** Every pair of areas with neighbouring walkable tiles, and the doorway between them if any. */
+  links(): AreaLink[] {
+    const seen = new Map<string, AreaLink>();
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const i = this.idx(x, y);
+        const a = this.areaIndex[i];
+        if (a < 0) continue;
+        for (const [nx, ny] of [[x + 1, y], [x, y + 1]]) {
+          if (!this.inBounds(nx, ny)) continue;
+          const j = this.idx(nx, ny);
+          const b = this.areaIndex[j];
+          if (b < 0 || b === a) continue;
+          const d = this.doorwayIndex[i] >= 0 ? this.doorwayIndex[i] : this.doorwayIndex[j];
+          const doorway = d >= 0 ? this.doorways[d].id : null;
+          const key = `${Math.min(a, b)}-${Math.max(a, b)}-${doorway ?? ""}`;
+          if (!seen.has(key)) seen.set(key, { a, b, doorway });
+        }
+      }
+    }
+    return [...seen.values()];
   }
 
   private furnish(r: RoomDef & { w: number; h: number }): void {
@@ -613,6 +683,9 @@ export function buildHostelMap(layout: LayoutDef, tasks: TaskDef[]): HostelMap {
       stairs: [...stairs.values()].filter((s) => s.floor === id),
       tasks: [...taskStations.values()].filter((t) => t.floor === id),
       doors: b.doors,
+      doorways: b.doorways,
+      doorwayIndex: b.doorwayIndex,
+      links: b.links(),
     });
   }
 
@@ -625,6 +698,7 @@ export function buildHostelMap(layout: LayoutDef, tasks: TaskDef[]): HostelMap {
     vents,
     hides,
     tasks: taskStations,
+    doorways: new Map([...floors.values()].flatMap((f) => f.doorways.map((d) => [d.id, d] as const))),
     chatRooms: (layout.chatRooms ?? []).map((ref) => findArea(ref).area.key),
   };
 }

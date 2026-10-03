@@ -10,9 +10,12 @@
 //
 // Who you can see:
 //  - Only your own floor is drawn.
-//  - Alive: players and bodies within your vision radius (crew 6 tiles,
-//    killers half that) with no wall or solid furniture in between. Ghosts,
-//    hiders and anyone inside a vent are invisible.
+//  - Lights on (and killers, always): every room and corridor connected to
+//    where you stand, as far as the screen goes. A closed door hides the
+//    room (or corridor) behind it.
+//  - Lights out (crew): LIGHTS_OUT_FRONT_TILES ahead of you, LIGHTS_OUT_BACK_TILES
+//    behind, stopped by walls, solid furniture and closed doors.
+//  - Ghosts, hiders and anyone inside a vent are invisible to the living.
 //  - Ghost: everything on your floor, including other ghosts (see-through).
 
 import Phaser from "phaser";
@@ -25,19 +28,19 @@ import {
   GHOST_SPEED_MULTIPLIER,
   HEARING_RANGE_TILES,
   INPUT_SEND_MS,
-  KILLER_VISION_MULTIPLIER,
-  LIGHTS_OUT_RADIUS_TILES,
   PLAYER_COLORS,
   PLAYER_RADIUS_PX,
   TICK_DT,
   TILE_SIZE,
   VIEW_MIN_HEIGHT_TILES,
   VIEW_WIDTH_TILES,
-  VISION_RADIUS_TILES,
   VISION_RAYS,
   VISION_WALL_PEEK_PX,
   WARDEN_CONE_DEG,
   WARDEN_CONE_TILES,
+  KILLERS_SEE_THROUGH_DOORS,
+  LIGHTS_OUT_BACK_TILES,
+  LIGHTS_OUT_FRONT_TILES,
 } from "../../../shared/constants";
 import { sfx } from "../audio/synth";
 import { attackReachPx, pickAttackTarget } from "../../../shared/combat";
@@ -48,6 +51,9 @@ import { castRay, hasLineOfSight, sanitizeDirection, stepGhost, stepMovement } f
 import { ClientMsg, GamePhase } from "../../../shared/types";
 import type { InputMessage, KillMessage, Vec2 } from "../../../shared/types";
 import { hostelMap } from "../../../shared/world";
+import { areaAt } from "../../../shared/buildMap";
+import { setDoorClosed, visibleAreas } from "../../../shared/doors";
+import { DoorView } from "../render/doors";
 import type { Body, Player } from "../../../server/schema/GameState";
 import { KeyboardControls } from "../input/keyboard";
 import { InterpolationBuffer } from "../render/interpolation";
@@ -75,6 +81,14 @@ import type { Gas, Npc } from "../../../server/schema/GameState";
 import { net } from "../net";
 import type { HUDScene } from "./HUD";
 import { MinigameScene } from "./Minigame";
+
+/**
+ * What the local player can see:
+ *   all    everything on the floor (ghosts, round over)
+ *   rooms  the areas connected to yours, not behind a closed door (lights on)
+ *   dark   a short flashlight-ish shape around you (lights out)
+ */
+type VisionMode = "all" | "rooms" | "dark";
 
 /** Max inputs sent in one frame when catching up after a hitch. */
 const MAX_INPUT_CATCHUP = 3;
@@ -148,6 +162,12 @@ export class GameScene extends Phaser.Scene {
   private fog!: Phaser.GameObjects.Graphics;
   /** taskId -> pulsing glow at its station (shown only for your own unfinished tasks on this floor). */
   private taskGlows = new Map<string, Phaser.GameObjects.Arc>();
+  private doorViews = new Map<string, DoorView>();
+  /** Bumped whenever a door opens or closes, so the visible-rooms cache knows to refresh. */
+  private doorVersion = 0;
+  /** Visible area indexes for "rooms" vision, and what they were computed for. */
+  private seenAreas: Set<number> | null = null;
+  private seenKey = "";
   private me: Player | null = null;
   private cleanups: (() => void)[] = [];
 
@@ -196,6 +216,10 @@ export class GameScene extends Phaser.Scene {
     this.reviveStartedAt = 0;
     this.fog = this.add.graphics().setDepth(FOG_DEPTH);
     this.taskGlows.clear();
+    this.doorViews.clear();
+    this.seenKey = "";
+    // A fresh scene starts with every doorway open; the room's door state is applied in bindRoom().
+    for (const floor of hostelMap.floors.values()) for (const d of floor.doorways) setDoorClosed(floor, d, false);
     for (const station of hostelMap.tasks.values()) {
       const glow = this.add
         .circle(station.x, station.y, TILE_SIZE * 0.4, TASK_GLOW_COLOR, 0.5)
@@ -274,7 +298,15 @@ export class GameScene extends Phaser.Scene {
       canVent: this.playing && !!c?.canVent,
       openTasks: this.playing ? net.openTaskIds : [],
       revivable: this.revivableBodies(),
+      doors: this.doorStates(),
     });
+  }
+
+  /** Doors this round: doorway id -> open. */
+  private doorStates(): Map<string, boolean> {
+    const doors = new Map<string, boolean>();
+    net.room?.state.doors.forEach((open, id) => doors.set(id, open));
+    return doors;
   }
 
   /** Supreme Leader with a revive left: every body (useTarget picks the one in reach). */
@@ -365,6 +397,9 @@ export class GameScene extends Phaser.Scene {
         this.cleanups.push($(npc).onChange(() => buffer.push(npc.x, npc.y)));
       }),
       $(room.state).npcs.onRemove((_npc, id) => this.removeNpc(id)),
+      $(room.state).doors.onAdd((open, id) => this.onDoor(id, open, false)),
+      $(room.state).doors.onChange((open, id) => this.onDoor(id, open, true)),
+      $(room.state).doors.onRemove((_open, id) => this.removeDoor(id)),
       $(room.state).gas.onAdd((gas, id) => {
         const puffs = [0, 1, 2, 3, 4, 5].map((i) => {
           const a = (i / 6) * Math.PI * 2;
@@ -428,6 +463,35 @@ export class GameScene extends Phaser.Scene {
     const killedAt = this.recentKills.get(body.victimId);
     const waiting = killedAt !== undefined && performance.now() - killedAt < BODY_REVEAL_WAIT_MS;
     this.bodies.set(id, { container, body, landed: !waiting });
+  }
+
+  /** A door appeared (new round) or opened/closed: update collision, art and vision. */
+  private onDoor(id: string, open: boolean, changed: boolean): void {
+    const doorway = hostelMap.doorways.get(id);
+    if (!doorway) return;
+    const floor = hostelMap.floors.get(doorway.floor)!;
+    const wasClosed = floor.grid.solid[doorway.tiles[0].y * floor.grid.width + doorway.tiles[0].x] === 1;
+    setDoorClosed(floor, doorway, !open);
+    let view = this.doorViews.get(id);
+    if (!view) {
+      view = new DoorView(this, floor, doorway);
+      this.floorViews.get(doorway.floor)?.add(view.graphics);
+      this.doorViews.set(id, view);
+    }
+    view.setOpen(open);
+    this.doorVersion++;
+    if (changed && wasClosed === open) {
+      const vol = this.earVolume(doorway.floor, doorway.x, doorway.y);
+      if (vol > 0) (open ? sfx.doorOpen : sfx.doorShut)(vol);
+    }
+  }
+
+  private removeDoor(id: string): void {
+    const doorway = hostelMap.doorways.get(id);
+    if (doorway) setDoorClosed(hostelMap.floors.get(doorway.floor)!, doorway, false);
+    this.doorViews.get(id)?.destroy();
+    this.doorViews.delete(id);
+    this.doorVersion++;
   }
 
   private removeNpc(id: string): void {
@@ -731,14 +795,34 @@ export class GameScene extends Phaser.Scene {
     this.updateVisibility(now);
   }
 
-  /** Vision radius in pixels, or null when you see everything (ghost, between rounds). */
-  private visionRadius(): number | null {
+  private visionMode(): VisionMode {
     const me = this.me;
-    if (!me || !me.alive || net.room?.state.phase === GamePhase.Ended) return null;
-    const mult = net.isKiller ? KILLER_VISION_MULTIPLIER : 1;
-    const normal = VISION_RADIUS_TILES * mult;
-    const lightsOut = net.room?.state.chaos === ChaosKind.LightsOut;
-    return (lightsOut ? Math.min(normal, LIGHTS_OUT_RADIUS_TILES) : normal) * TILE_SIZE;
+    if (!me || !me.alive || net.room?.state.phase === GamePhase.Ended) return "all";
+    if (net.isKiller) return KILLERS_SEE_THROUGH_DOORS ? "all" : "rooms";
+    return net.room?.state.chaos === ChaosKind.LightsOut ? "dark" : "rooms";
+  }
+
+  /** Lights-out sight distance in pixels in a given direction: longest ahead, shortest behind. */
+  private darkReach(angle: number): number {
+    const mid = (LIGHTS_OUT_FRONT_TILES + LIGHTS_OUT_BACK_TILES) / 2;
+    const swing = (LIGHTS_OUT_FRONT_TILES - LIGHTS_OUT_BACK_TILES) / 2;
+    return (mid + swing * Math.cos(angle - this.facing)) * TILE_SIZE;
+  }
+
+  /** Areas (indexes into the floor's areas) visible from where you stand, or null for "everything". */
+  private visibleAreaSet(): Set<number> | null {
+    const floor = hostelMap.floors.get(this.currentFloor);
+    if (!floor) return null;
+    const here = areaAt(floor, this.display.x, this.display.y);
+    if (!here) return null;
+    const from = floor.areas.indexOf(here);
+    const key = `${floor.id}:${from}:${this.doorVersion}`;
+    if (key !== this.seenKey) {
+      this.seenKey = key;
+      const doors = net.room?.state.doors;
+      this.seenAreas = visibleAreas(floor, from, (id) => doors?.get(id) === false);
+    }
+    return this.seenAreas;
   }
 
   private updateVisibility(now: number): void {
@@ -746,12 +830,18 @@ export class GameScene extends Phaser.Scene {
     const me = this.me!;
     const grid = hostelMap.floors.get(this.currentFloor)?.grid;
     if (!grid) return;
-    const radius = this.visionRadius();
+    const mode = this.visionMode();
+    const floor = hostelMap.floors.get(this.currentFloor)!;
+    const seen = mode === "rooms" ? this.visibleAreaSet() : null;
     const eye = this.display;
     const canSee = (x: number, y: number, extra = PLAYER_RADIUS_PX) => {
-      if (radius === null) return true;
+      if (mode === "all") return true;
+      if (mode === "rooms") {
+        const area = areaAt(floor, x, y);
+        return !seen || !area || seen.has(floor.areas.indexOf(area));
+      }
       const d = Math.hypot(x - eye.x, y - eye.y);
-      return d <= radius + extra && hasLineOfSight(grid, eye.x, eye.y, x, y);
+      return d <= this.darkReach(Math.atan2(y - eye.y, x - eye.x)) + extra && hasLineOfSight(grid, eye.x, eye.y, x, y);
     };
 
     this.remotes.forEach((r, id) => {
@@ -797,7 +887,7 @@ export class GameScene extends Phaser.Scene {
       n.view.container.setVisible(show).setPosition(n.pos.x, n.pos.y).setDepth(n.pos.y);
       if (show) n.view.rig?.update(n.pos.x, n.pos.y, false);
       n.speech?.setText(GUJJU_SPEECH[n.npc.mood] ?? "");
-      if (n.cone) this.drawWardenCone(n.cone, sameFloor, n.pos, n.npc.facing, grid);
+      if (n.cone) this.drawWardenCone(n.cone, show, n.pos, n.npc.facing, grid);
     });
 
     this.gasClouds.forEach((g) => g.obj.setVisible(g.gas.floor === this.currentFloor));
@@ -811,7 +901,8 @@ export class GameScene extends Phaser.Scene {
 
     this.drawPowerCut(now, grid);
 
-    this.drawFog(radius, grid);
+    if (mode === "dark") this.drawDarkFog(grid);
+    else this.drawRoomFog(mode === "rooms" ? seen : null);
   }
 
   /** The warden's flashlight: a yellow cone, stopped by walls, drawn above the fog. */
@@ -852,15 +943,51 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Key of what the room fog currently shows, so it's only redrawn when that changes. */
+  private roomFogKey = "";
+
   /**
-   * Darkness everywhere except the area you can see: rays are cast around
-   * you and stop at walls and solid furniture. The dark shape is one polygon
-   * (screen-sized rectangle with the visible area cut out as a "keyhole").
+   * Lights on: darkness over every room and corridor you can't see (behind
+   * closed doors). Walls and doors themselves stay visible.
    */
-  private drawFog(radius: number | null, grid: Parameters<typeof castRay>[0]): void {
+  private drawRoomFog(seen: Set<number> | null): void {
+    const key = seen ? `${this.currentFloor}:${this.seenKey}` : "none";
+    if (key === this.roomFogKey) return;
+    this.roomFogKey = key;
     const g = this.fog;
     g.clear();
-    if (radius === null) return;
+    if (!seen) return;
+    const floor = hostelMap.floors.get(this.currentFloor)!;
+    g.fillStyle(0x000000, FOG_ALPHA);
+    floor.areas.forEach((a, i) => {
+      if (seen.has(i)) return;
+      // Corridors can overlap; only darken tiles that really belong to this area.
+      const { x, y, w, h } = a.rect;
+      for (let ty = y; ty < y + h; ty++) {
+        let run = -1;
+        for (let tx = x; tx <= x + w; tx++) {
+          const mine = tx < x + w && floor.areaIndex[ty * floor.grid.width + tx] === i;
+          if (mine && run < 0) run = tx;
+          if (!mine && run >= 0) {
+            g.fillRect(run * TILE_SIZE, ty * TILE_SIZE, (tx - run) * TILE_SIZE, TILE_SIZE);
+            run = -1;
+          }
+        }
+      }
+    });
+  }
+
+  /**
+   * Lights out: darkness everywhere except the shape you can see: rays are
+   * cast around you (further ahead than behind) and stop at walls, solid
+   * furniture and closed doors. The dark shape is one polygon (screen-sized
+   * rectangle with the visible area cut out as a "keyhole").
+   */
+  private drawDarkFog(grid: Parameters<typeof castRay>[0]): void {
+    const g = this.fog;
+    g.clear();
+    this.roomFogKey = "";
+    const radius = LIGHTS_OUT_FRONT_TILES * TILE_SIZE;
     const cx = this.display.x;
     const cy = this.display.y;
     const v = this.cameras.main.worldView;
@@ -873,7 +1000,8 @@ export class GameScene extends Phaser.Scene {
     const ring: Vec2[] = [];
     for (let i = 0; i < VISION_RAYS; i++) {
       const a = (i / VISION_RAYS) * Math.PI * 2;
-      const d = Math.min(radius, castRay(grid, cx, cy, a, radius) + VISION_WALL_PEEK_PX);
+      const reach = this.darkReach(a);
+      const d = Math.min(reach, castRay(grid, cx, cy, a, reach) + VISION_WALL_PEEK_PX);
       ring.push({ x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d });
     }
     // Outer rectangle clockwise from the left-middle, then a bridge to the

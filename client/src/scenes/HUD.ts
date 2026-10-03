@@ -45,7 +45,7 @@ const CHAT_LOG_SECONDS = 10;
 const CHAOS_BANNER_MS = 3000;
 const CHAOS_TEXT: Record<string, [string, string]> = {
   warden: ["🔦 WARDEN PATROL!", "Stay out of his flashlight or you'll be frozen."],
-  lights: ["💡 LIGHTS OUT!", "You can barely see a thing…"],
+  lights: ["💡 LIGHTS OUT!", "You can only see a few steps ahead…"],
   foodfight: ["🍛 FOOD FIGHT IN THE MESS!", "Laddus everywhere!"],
   powercut: ["⚡ POWER CUT!", "BZZZT. The doors are flickering."],
 };
@@ -83,6 +83,8 @@ function describeUse(t: UseTarget): { button: string; prompt: string } {
       return { button: "VENT", prompt: "Jump into the vent" };
     case "task":
       return { button: "TASK", prompt: t.station.name };
+    case "door":
+      return t.open ? { button: "CLOSE", prompt: "Close the door" } : { button: "OPEN", prompt: "Open the door" };
     case "revive":
       return { button: "REVIVE", prompt: "HOLD to revive this body" };
   }
@@ -318,7 +320,7 @@ export class HUDScene extends Phaser.Scene {
     const chaos = net.room?.state.chaos ?? "";
     if (chaos !== this.lastChaos) {
       this.lastChaos = chaos;
-      const text = CHAOS_TEXT[chaos];
+      const text = chaos === "lights" && net.isKiller ? ["💡 LIGHTS OUT!", "The crew are in the dark. You still see everything."] : CHAOS_TEXT[chaos];
       if (text) {
         this.chaosBanner.setText(`${text[0]}\n${text[1]}`).setVisible(true).setScale(0.3);
         this.tweens.add({ targets: this.chaosBanner, scale: 1, duration: 300, ease: "Back.Out" });
