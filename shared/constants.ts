@@ -30,6 +30,9 @@ export const INPUT_BUDGET_MAX = 3;
 /** Inputs queued beyond this are dropped (the oldest first). */
 export const INPUT_QUEUE_MAX = 10;
 
+/** Largest WebSocket message the server accepts (face photos are the biggest). */
+export const WS_MAX_PAYLOAD_BYTES = 64 * 1024;
+
 /** A disconnected player keeps their slot this long. */
 export const RECONNECT_SECONDS = 30;
 
@@ -190,6 +193,15 @@ export const HEARING_RANGE_TILES = 12;
 export const KILL_FEED_SECONDS = 6;
 /** After the winning condition is met, the round keeps running this long (so the last kill plays out). */
 export const ROUND_END_DELAY_MS = 2500;
+
+// ---------- Face photos (each player's own selfie on their character) ----------
+/** Photos are cropped square and shrunk to this many pixels before sending. */
+export const FACE_SIZE_PX = 80;
+export const FACE_JPEG_QUALITY = 0.8;
+/** The server refuses face data URLs longer than this (an 80x80 JPEG is ~3-5k). */
+export const FACE_MAX_CHARS = 24_000;
+/** The photo head is drawn this much bigger than the cartoon head (big-head look). */
+export const FACE_HEAD_SCALE = 1.2;
 
 // ---------- Character sprites (client) ----------
 /** World pixels per sprite-sheet pixel: a 64x80 frame is drawn ~51x64 world px (a tile is 32). */

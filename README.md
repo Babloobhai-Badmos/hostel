@@ -122,6 +122,15 @@ Every 60–90 seconds something happens, one at a time, with a siren and a banne
 
 No event ever kills anyone. Timings are in `shared/constants.ts`. To try them quickly the host can add `&chaos=all` (or `&chaos=warden`, `lights`, `foodfight`, `powercut`) to a debug URL, and events then come every 12 seconds.
 
+## Face photos
+
+In the lobby, tap **📷 Add your photo** to take a selfie or pick one from your gallery. It's cropped to a circle and put on your character's head (big-head style) for everyone to see: facing down or sideways you see the photo, walking away you see the back of the head. When you die, your body lies there with your photo sideways and red X-eyes. Tap ✕ to go back to the cartoon face.
+
+- Each phone picks its own photo, and remembers it for next time.
+- You can change it only in the lobby, not during a round.
+- Photos are shrunk to 80 x 80 pixels and kept only in the server's memory while the room exists. Nothing is saved on the laptop running the server.
+- Everyone still has the same body, so a photo never gives away who the killer is.
+
 ## Chat
 
 Living players standing in the **Common Lounge** can talk to everyone else in the lounge (press Enter, or tap 💬 CHAT). Messages show as bubbles over heads and in a small log; nobody outside the lounge sees them. 80 characters per message, one message every 1.5 s. Which rooms allow chat is set by `chatRooms` in `shared/layout.json`.

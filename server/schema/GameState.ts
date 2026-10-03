@@ -28,6 +28,8 @@ export class Player extends Schema {
   @type("uint8") tp = 0;
   /** Index into PLAYER_COLORS. */
   @type("uint8") color = 0;
+  /** The player's own face photo (small JPEG data URL), or "" for the cartoon face. */
+  @type("string") face = "";
   @type("boolean") connected = true;
   /** Last input sequence number the server applied; used for client reconciliation. */
   @type("uint32") ack = 0;

@@ -2,6 +2,7 @@
 
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import { RECONNECT_SECONDS, ROOM_NAME } from "../../shared/constants";
+import { savedFace } from "./faces";
 import { ClientMsg, ServerMsg } from "../../shared/types";
 import type {
   ChatMessage,
@@ -129,7 +130,7 @@ class Net {
 
   async join(name: string): Promise<GameRoom> {
     safeSet(localStorage, NAME_KEY, name);
-    const options: JoinOptions = { name, ...debugOptionsFromUrl() };
+    const options: JoinOptions = { name, face: savedFace(), ...debugOptionsFromUrl() };
     const room = await client.joinOrCreate<GameState>(ROOM_NAME, options);
     this.attach(room);
     return room;

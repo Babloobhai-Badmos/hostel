@@ -1,6 +1,6 @@
 // Lobby system: display names, colours, spawn slots and who the host is.
 
-import { NAME_FALLBACK, NAME_MAX_LENGTH, PLAYER_COLORS } from "../../shared/constants";
+import { FACE_MAX_CHARS, NAME_FALLBACK, NAME_MAX_LENGTH, PLAYER_COLORS } from "../../shared/constants";
 import type { Vec2 } from "../../shared/types";
 import type { GameState, Player } from "../schema/GameState";
 
@@ -9,6 +9,15 @@ export function sanitizeName(raw: unknown): string {
   const text = typeof raw === "string" ? raw : "";
   const cleaned = text.replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim();
   return cleaned.slice(0, NAME_MAX_LENGTH) || NAME_FALLBACK;
+}
+
+/**
+ * A face photo is accepted only as a small JPEG/PNG/WebP data URL. Anything
+ * else (wrong type, too big) is dropped and the cartoon face is used.
+ */
+export function sanitizeFace(raw: unknown): string {
+  if (typeof raw !== "string" || raw.length > FACE_MAX_CHARS) return "";
+  return /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(raw) ? raw : "";
 }
 
 /** Append a number if someone already has this name ("Rahul", "Rahul 2", ...). */

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
-import { ROOM_NAME, SERVER_HOST, SERVER_PORT } from "../shared/constants";
+import { ROOM_NAME, SERVER_HOST, SERVER_PORT, WS_MAX_PAYLOAD_BYTES } from "../shared/constants";
 import { HostelRoom } from "./rooms/HostelRoom";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -29,7 +29,8 @@ app.get("/", (_req, res) => {
 
 const httpServer = http.createServer(app);
 const gameServer = new Server({
-  transport: new WebSocketTransport({ server: httpServer }),
+  // Face photos are a few kB, more than the 4 kB default message limit.
+  transport: new WebSocketTransport({ server: httpServer, maxPayload: WS_MAX_PAYLOAD_BYTES }),
   greet: false,
 });
 gameServer.define(ROOM_NAME, HostelRoom);

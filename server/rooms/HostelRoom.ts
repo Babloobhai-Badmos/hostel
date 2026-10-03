@@ -31,6 +31,7 @@ import {
   ensureHost,
   pickColor,
   pickSpawn,
+  sanitizeFace,
   sanitizeName,
   spawnAssignments,
   uniqueName,
@@ -111,6 +112,12 @@ export class HostelRoom extends Room<GameState> {
     this.onMessage(ClientMsg.ReviveStart, (client) => this.handleReviveStart(client));
     this.onMessage(ClientMsg.ReviveCancel, (client) => this.abilities.reviveCancel(client.sessionId));
     this.onMessage(ClientMsg.Chat, (client, msg: unknown) => this.handleChat(client, msg));
+    this.onMessage(ClientMsg.Face, (client, msg: unknown) => {
+      // Faces can only change in the lobby, so nobody swaps looks mid-round.
+      const player = this.activePlayer(client);
+      if (!player || this.state.phase !== GamePhase.Lobby) return;
+      player.face = sanitizeFace(typeof msg === "object" && msg !== null ? (msg as { face?: unknown }).face : msg);
+    });
   }
 
   override onJoin(client: Client, options: Partial<JoinOptions> = {}): void {
@@ -119,6 +126,7 @@ export class HostelRoom extends Room<GameState> {
     player.id = client.sessionId;
     player.name = uniqueName(this.state, sanitizeName(options.name));
     player.color = pickColor(this.state);
+    player.face = sanitizeFace(options.face);
     const spawn = pickSpawn(this.state, this.map.spawns);
     player.floor = this.map.spawnFloor;
     player.x = spawn.x;

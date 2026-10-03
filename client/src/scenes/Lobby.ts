@@ -5,6 +5,7 @@ import Phaser from "phaser";
 import { MAX_PLAYERS, MIN_PLAYERS_TO_START, NAME_MAX_LENGTH, PLAYER_COLORS } from "../../../shared/constants";
 import { ClientMsg } from "../../../shared/types";
 import { net } from "../net";
+import { photoToFace, saveFace, savedFace } from "../faces";
 
 const $id = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -60,6 +61,36 @@ export class LobbyScene extends Phaser.Scene {
     const onJoinClick = () => void join();
     const onStartClick = () => net.room?.send(ClientMsg.Start);
 
+    // Face photo: camera or gallery, remembered on this device, sent to the room if we're in one.
+    const faceBtn = $id<HTMLButtonElement>("face-btn");
+    const faceClear = $id<HTMLButtonElement>("face-clear");
+    const faceInput = $id<HTMLInputElement>("face-input");
+    const setFace = (face: string) => {
+      saveFace(face);
+      this.showFacePreview(face);
+      net.room?.send(ClientMsg.Face, { face });
+    };
+    const onFaceClick = () => faceInput.click();
+    const onFaceClear = () => setFace("");
+    const onFacePicked = async () => {
+      const file = faceInput.files?.[0];
+      faceInput.value = "";
+      if (!file) return;
+      faceBtn.disabled = true;
+      try {
+        setFace(await photoToFace(file));
+        errorEl.textContent = "";
+      } catch (err) {
+        errorEl.textContent = err instanceof Error ? err.message : String(err);
+      } finally {
+        faceBtn.disabled = false;
+      }
+    };
+    faceBtn.addEventListener("click", onFaceClick);
+    faceClear.addEventListener("click", onFaceClear);
+    faceInput.addEventListener("change", onFacePicked);
+    this.showFacePreview(savedFace());
+
     joinBtn.addEventListener("click", onJoinClick);
     nameInput.addEventListener("keydown", onKey);
     startBtn.addEventListener("click", onStartClick);
@@ -67,6 +98,9 @@ export class LobbyScene extends Phaser.Scene {
       joinBtn.removeEventListener("click", onJoinClick);
       nameInput.removeEventListener("keydown", onKey);
       startBtn.removeEventListener("click", onStartClick);
+      faceBtn.removeEventListener("click", onFaceClick);
+      faceClear.removeEventListener("click", onFaceClear);
+      faceInput.removeEventListener("change", onFacePicked);
       overlay.classList.remove("show");
     });
 
@@ -80,6 +114,14 @@ export class LobbyScene extends Phaser.Scene {
       this.cleanups.forEach((fn) => fn());
       this.cleanups = [];
     });
+  }
+
+  private showFacePreview(face: string): void {
+    const preview = $id<HTMLDivElement>("face-preview");
+    preview.style.backgroundImage = face ? `url("${face}")` : "";
+    preview.textContent = face ? "" : "🙂";
+    $id<HTMLButtonElement>("face-btn").textContent = face ? "📷 Change photo" : "📷 Add your photo";
+    $id<HTMLButtonElement>("face-clear").classList.toggle("hidden", !face);
   }
 
   /** Keep the player list and Start button in sync with the room state. */
@@ -120,8 +162,15 @@ export class LobbyScene extends Phaser.Scene {
       const li = document.createElement("li");
       if (!p.connected) li.classList.add("offline");
       const dot = document.createElement("span");
-      dot.className = "dot";
-      dot.style.background = `#${PLAYER_COLORS[p.color].toString(16).padStart(6, "0")}`;
+      const color = `#${PLAYER_COLORS[p.color].toString(16).padStart(6, "0")}`;
+      if (p.face) {
+        dot.className = "face-thumb";
+        dot.style.backgroundImage = `url("${p.face}")`;
+        dot.style.borderColor = color;
+      } else {
+        dot.className = "dot";
+        dot.style.background = color;
+      }
       const label = document.createElement("span");
       const tags = [p.id === room.state.hostId ? "👑" : "", p.id === room.sessionId ? "(you)" : ""];
       label.textContent = `${p.name} ${tags.join(" ")}`.trim();

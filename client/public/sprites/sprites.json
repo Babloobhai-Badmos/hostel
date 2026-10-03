@@ -3,7 +3,8 @@
     "Sprite sheets for the characters. See README.md in this folder.",
     "Every sheet uses the same grid: frameWidth x frameHeight frames, columns x rows.",
     "feetY = the pixel row (inside a frame) where the feet touch the ground. headTopY = top of the head.",
-    "Files can be .svg or .png (PNG must be the sheet size or an exact multiple, e.g. 2x)."
+    "Files can be .svg or .png (PNG must be the sheet size or an exact multiple, e.g. 2x).",
+    "head / deadHead: where a player's face photo goes (circle centre x, y and radius r, in frame pixels) when standing and when lying dead."
   ],
   "frameWidth": 64,
   "frameHeight": 80,
@@ -11,6 +12,8 @@
   "rows": 4,
   "feetY": 76,
   "headTopY": 6,
+  "head": { "x": 32, "y": 24, "r": 17 },
+  "deadHead": { "x": 13, "y": 60, "r": 12 },
   "player": { "shirt": "player-shirt.svg", "details": "player-details.svg" },
   "npcs": { "gujju": "gujju.svg", "warden": "warden.svg" }
 }

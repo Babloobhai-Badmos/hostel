@@ -22,6 +22,8 @@ export const ClientMsg = {
   ReviveCancel: "reviveCancel",
   /** A chat line (only works inside a chat room, e.g. the Common Lounge). */
   Chat: "chat",
+  /** Lobby only: set or clear your face photo ({ face: dataURL | "" }). */
+  Face: "face",
 } as const;
 export type ClientMsg = (typeof ClientMsg)[keyof typeof ClientMsg];
 
@@ -81,6 +83,8 @@ export interface JoinOptions {
   role?: string;
   /** Debug only: frequent chaos events, all kinds ("all") or just one (?chaos=warden). */
   chaos?: string;
+  /** Your face photo as a small JPEG data URL (optional). */
+  face?: string;
 }
 
 export const ChaosKind = {

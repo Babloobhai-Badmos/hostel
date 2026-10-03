@@ -140,11 +140,14 @@ export function createWardenView(scene: Phaser.Scene): PlayerView {
   return view;
 }
 
-/** A body on the floor: blood pool, the body lying face-down with X-eyes and its bare bum up. */
-export function createCorpseView(scene: Phaser.Scene, color: number): Phaser.GameObjects.Container {
+/**
+ * A body on the floor: blood pool, the body lying face-down with X-eyes and
+ * its bare bum up. faceKey: the victim's face photo texture, if loaded.
+ */
+export function createCorpseView(scene: Phaser.Scene, color: number, faceKey?: string): Phaser.GameObjects.Container {
   const blood = scene.add.image(0, 2, TEX_BLOOD).setAngle(Phaser.Math.Between(0, 359));
   if (hasPlayerSprites(scene)) {
-    return scene.add.container(0, 0, [blood.setScale(1.4), ...createDeadLayers(scene, color)]);
+    return scene.add.container(0, 0, [blood.setScale(1.4), ...createDeadLayers(scene, color, faceKey)]);
   }
   const flat = scene.add.image(0, 0, TEX_CORPSE).setTint(color);
   const detail = scene.add.image(0, -PLAYER_RADIUS_PX * 0.45, TEX_CORPSE_DETAIL);

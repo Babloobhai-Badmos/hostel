@@ -33,6 +33,8 @@ Each sheet is **6 columns x 4 rows** of **64 x 80 px** frames (whole sheet 384 x
 
 Inside every frame, the **feet touch the ground at y = 76** and the top of the head is around **y = 6** (set as `feetY` / `headTopY` in `sprites.json`). Keep characters inside their own 64 x 80 box and keep the feet on that line, or they'll appear to float or sink.
 
+Players' face photos are drawn on top of the sheets as a circle. `head` in `sprites.json` is where it goes on standing frames (centre x, y and radius r; the photo is drawn 1.2x that size, see `FACE_HEAD_SCALE`), and `deadHead` is the head on the lying-down frame. If you move or resize the head in your edits, update those numbers. Facing up (row 2) never shows the photo.
+
 In the SVGs every frame is its own group named `r<row>c<col>` (for example `r0c2` = facing down, first walk frame), so in Inkscape's *Objects* panel you can find and edit one frame at a time.
 
 ## Touching up

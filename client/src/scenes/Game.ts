@@ -53,7 +53,8 @@ import { KeyboardControls } from "../input/keyboard";
 import { InterpolationBuffer } from "../render/interpolation";
 import { createFloorView } from "../render/mapRenderer";
 import { createCorpseView, createGujjuView, createPlayerView, createWardenView } from "../render/placeholderSprites";
-import { createRagdollLayers, hasPlayerSprites } from "../render/characterSprites";
+import { createDeadFace, createRagdollLayers, hasPlayerSprites } from "../render/characterSprites";
+import { ensureFaceTexture, faceTextureKey } from "../faces";
 import type { PlayerView } from "../render/placeholderSprites";
 import {
   beatEffect,
@@ -411,7 +412,19 @@ export class GameScene extends Phaser.Scene {
 
   private addBody(body: Body, id: string): void {
     this.bodies.get(id)?.container.destroy();
-    const container = createCorpseView(this, PLAYER_COLORS[body.color]).setPosition(body.x, body.y).setDepth(body.y - TILE_SIZE).setVisible(false);
+    const faceKey = this.faceKeyOf(body.victimId);
+    const container = createCorpseView(this, PLAYER_COLORS[body.color], faceKey)
+      .setPosition(body.x, body.y)
+      .setDepth(body.y - TILE_SIZE)
+      .setVisible(false);
+    // The photo wasn't loaded yet (e.g. someone you never saw): add it when it is.
+    const face = net.room?.state.players.get(body.victimId)?.face;
+    if (face && !faceKey && hasPlayerSprites(this)) {
+      void ensureFaceTexture(this, face).then((key) => {
+        const dead = container.active ? createDeadFace(this, key) : null;
+        if (dead) container.add(dead);
+      }).catch(() => undefined);
+    }
     const killedAt = this.recentKills.get(body.victimId);
     const waiting = killedAt !== undefined && performance.now() - killedAt < BODY_REVEAL_WAIT_MS;
     this.bodies.set(id, { container, body, landed: !waiting });
@@ -468,7 +481,7 @@ export class GameScene extends Phaser.Scene {
     }
     const color = PLAYER_COLORS[net.room?.state.players.get(msg.victimId)?.color ?? 0];
     const doll = hasPlayerSprites(this)
-      ? () => this.add.container(0, 0, createRagdollLayers(this, color))
+      ? () => this.add.container(0, 0, createRagdollLayers(this, color, this.faceKeyOf(msg.victimId)))
       : undefined;
     killEffect(this, msg.x, msg.y, msg.angle, color, msg.finisher, () => this.markLanded(msg.victimId), doll);
   }
@@ -520,6 +533,33 @@ export class GameScene extends Phaser.Scene {
     else if (isLocal && player.stunned) tag = " (stunned)";
     view.label.setText(player.name + tag);
     view.body.setTint(PLAYER_COLORS[player.color]);
+    this.refreshFace(view, player.face);
+  }
+
+  /** Face photo currently shown (or being loaded) on each view. */
+  private shownFaces = new WeakMap<PlayerView, string>();
+
+  private refreshFace(view: PlayerView, face: string): void {
+    if (!view.rig || this.shownFaces.get(view) === face) return;
+    this.shownFaces.set(view, face);
+    if (!face) {
+      view.rig.setFace(null);
+      return;
+    }
+    ensureFaceTexture(this, face)
+      .then((key) => {
+        // Still the face this view should show (it may have changed while loading).
+        if (this.shownFaces.get(view) === face && view.container.active) view.rig?.setFace(key);
+      })
+      .catch(() => this.shownFaces.delete(view));
+  }
+
+  /** Texture key of a player's face photo if it's ready to draw. */
+  private faceKeyOf(playerId: string): string | undefined {
+    const face = net.room?.state.players.get(playerId)?.face;
+    if (!face) return undefined;
+    const key = faceTextureKey(face);
+    return this.textures.exists(key) ? key : undefined;
   }
 
   // ---------- Prediction ----------
