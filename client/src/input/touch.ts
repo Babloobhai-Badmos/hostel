@@ -56,6 +56,8 @@ export class TouchControls {
   private buttons: ActionButton[] = [];
   private _vector: Vec2 = { x: 0, y: 0 };
   readonly visible: boolean;
+  /** While suspended (a minigame is open) the controls are hidden and ignore touches. */
+  private suspended = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -98,6 +100,19 @@ export class TouchControls {
     this.layout();
   }
 
+  setSuspended(value: boolean): void {
+    if (value === this.suspended) return;
+    this.suspended = value;
+    this.stickPointer = null;
+    this._vector = { x: 0, y: 0 };
+    for (const b of this.buttons) {
+      b.held = false;
+      b.pressed = false;
+      b.pointerId = null;
+      b.text.setVisible(this.visible && !value);
+    }
+  }
+
   /** Joystick direction, length 0..1. */
   get vector(): Vec2 {
     return this._vector;
@@ -135,7 +150,7 @@ export class TouchControls {
   draw(): void {
     const g = this.gfx;
     g.clear();
-    if (!this.visible) return;
+    if (!this.visible || this.suspended) return;
 
     if (this.stickPointer !== null) {
       g.fillStyle(0xffffff, BASE_ALPHA * 0.5);
@@ -188,7 +203,7 @@ export class TouchControls {
   }
 
   private onDown(p: Phaser.Input.Pointer): void {
-    if (!this.visible) return;
+    if (!this.visible || this.suspended) return;
     for (const b of this.buttons) {
       if (Phaser.Math.Distance.Between(p.x, p.y, b.x, b.y) <= b.r * 1.15) {
         if (b.enabled) {

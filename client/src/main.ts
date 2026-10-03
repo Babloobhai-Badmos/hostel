@@ -5,6 +5,7 @@ import { LobbyScene } from "./scenes/Lobby";
 import { GameScene } from "./scenes/Game";
 import { HUDScene } from "./scenes/HUD";
 import { ResultsScene } from "./scenes/Results";
+import { MinigameScene } from "./scenes/Minigame";
 import { net } from "./net";
 import { GamePhase } from "../../shared/types";
 
@@ -25,7 +26,7 @@ const game = new Phaser.Game({
   },
   input: { activePointers: MAX_TOUCH_POINTERS },
   render: { antialias: true, roundPixels: true },
-  scene: [BootScene, LobbyScene, GameScene, HUDScene, ResultsScene],
+  scene: [BootScene, LobbyScene, GameScene, HUDScene, ResultsScene, MinigameScene],
 });
 
 /**
@@ -39,6 +40,7 @@ function showScenesFor(phase: string): void {
   const sm = game.scene;
   const freshRoom = boundRoom !== net.room;
   boundRoom = net.room;
+  if (phase !== GamePhase.Playing) sm.stop("Minigame");
   if (phase === GamePhase.Lobby) {
     sm.stop("Game");
     sm.stop("HUD");

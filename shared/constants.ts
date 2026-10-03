@@ -129,6 +129,19 @@ export const VISION_WALL_PEEK_PX = 10;
 /** Darkness outside your vision (1 = pitch black). */
 export const FOG_ALPHA = 0.94;
 
+// ---------- Tasks ----------
+/** Each regular player gets this many tasks, picked at random from tasks.json. */
+export const TASKS_PER_PLAYER = 6;
+/** How close (centre to centre) you must be to a task station to open or finish it. */
+export const TASK_RANGE_TILES = 1.3;
+/**
+ * The server refuses a task finished faster than this after opening it.
+ * Real minigames take 3–15 s; this only stops scripted instant completions.
+ */
+export const TASK_MIN_SECONDS = 2;
+/** Debug bots tick off one of their tasks this often (they don't play minigames). */
+export const DEBUG_BOT_TASK_SECONDS = 25;
+
 // ---------- Round end ----------
 export const KILL_FEED_SECONDS = 6;
 /** After the winning condition is met, the round keeps running this long (so the last kill plays out). */

@@ -49,7 +49,8 @@ export class ResultsScene extends Phaser.Scene {
     for (const p of rows) {
       const tr = document.createElement("tr");
       if (!p.alive) tr.className = "dead";
-      const cells = [p.name, p.character, p.alive ? "Alive" : "Dead", p.role === "killer" ? String(p.kills) : ""];
+      const work = p.role === "killer" ? `${p.kills} kill${p.kills === 1 ? "" : "s"}` : p.tasksTotal ? `${p.tasksDone}/${p.tasksTotal} tasks` : "";
+      const cells = [p.name, p.character, p.alive ? "Alive" : "Dead", work];
       cells.forEach((text, i) => {
         const td = document.createElement("td");
         td.textContent = text;

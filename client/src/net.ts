@@ -10,6 +10,8 @@ import type {
   ResultsMessage,
   RoleMessage,
   SearchMessage,
+  TaskListMessage,
+  TaskOpenMessage,
   VentPopMessage,
 } from "../../shared/types";
 import { character } from "../../shared/characters";
@@ -38,6 +40,9 @@ export interface NetEvents {
   search: SearchMessage;
   results: ResultsMessage;
   error: string;
+  taskOpen: TaskOpenMessage;
+  taskClose: null;
+  taskList: TaskListMessage;
 }
 type EventHandler<K extends keyof NetEvents> = (msg: NetEvents[K]) => void;
 
@@ -62,6 +67,8 @@ class Net {
   /** performance.now() timestamps when each action is ready again. */
   readyAt = { attack: 0, vent: 0, search: 0, protection: 0 };
   results: ResultsMessage | null = null;
+  /** My task list this round (killers: a fake one). */
+  tasks: TaskListMessage = { tasks: [], fake: false };
   private roomListeners = new Set<Listener>();
   private statusListeners = new Set<Listener>();
   private eventHandlers = new Map<keyof NetEvents, Set<(msg: never) => void>>();
@@ -72,6 +79,11 @@ class Net {
 
   get isKiller(): boolean {
     return this.character?.role === "killer";
+  }
+
+  /** Ids of my unfinished tasks. */
+  get openTaskIds(): string[] {
+    return this.tasks.tasks.filter((t) => !t.done).map((t) => t.id);
   }
 
   /** Subscribe to a server event; returns an unsubscribe function. */
@@ -156,11 +168,18 @@ class Net {
       this.results = msg;
       this.emit("results", msg);
     });
+    room.onMessage(ServerMsg.TaskList, (msg: TaskListMessage) => {
+      this.tasks = msg;
+      this.emit("taskList", msg);
+    });
+    room.onMessage(ServerMsg.TaskOpen, (msg: TaskOpenMessage) => this.emit("taskOpen", msg));
+    room.onMessage(ServerMsg.TaskClose, () => this.emit("taskClose", null));
     // Back in the lobby: forget last round's role and results.
     getStateCallbacks(room)(room.state).listen("phase", (phase) => {
       if (phase === "lobby") {
         this.role = null;
         this.results = null;
+        this.tasks = { tasks: [], fake: false };
       }
     });
     room.send(ClientMsg.WhoAmI);

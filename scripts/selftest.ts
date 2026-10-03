@@ -6,11 +6,21 @@
 // exactly like a player holding the joystick would.
 
 import { Client, Room } from "colyseus.js";
-import { BASE_SPEED_PX_PER_SEC, INPUT_SEND_MS, ROLE_REVEAL_SECONDS, ROOM_NAME, SERVER_PORT, SPAWN_PROTECTION_SECONDS, TICK_DT, TILE_SIZE } from "../shared/constants";
+import {
+  BASE_SPEED_PX_PER_SEC,
+  INPUT_SEND_MS,
+  ROLE_REVEAL_SECONDS,
+  ROOM_NAME,
+  SERVER_PORT,
+  SPAWN_PROTECTION_SECONDS,
+  TASK_MIN_SECONDS,
+  TICK_DT,
+  TILE_SIZE,
+} from "../shared/constants";
 import { character } from "../shared/characters";
 import { hostelMap } from "../shared/world";
 import { ClientMsg, ServerMsg } from "../shared/types";
-import type { RoleMessage, Vec2 } from "../shared/types";
+import type { RoleMessage, TaskListMessage, TaskOpenMessage, Vec2 } from "../shared/types";
 
 const url = process.argv[2] ?? `ws://localhost:${SERVER_PORT}`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -32,11 +42,19 @@ interface PlayerView {
 class TestClient {
   room!: Room;
   role: RoleMessage | null = null;
+  tasks: TaskListMessage = { tasks: [], fake: false };
+  lastOpen: TaskOpenMessage | null = null;
+  closes = 0;
   private seq = 0;
 
-  async join(name: string, options: Record<string, unknown> = {}): Promise<this> {
-    this.room = await new Client(url).joinOrCreate(ROOM_NAME, { name, ...options });
+  /** Without `roomId`, creates a brand-new room so the test never lands in a real game. */
+  async join(name: string, options: Record<string, unknown> = {}, roomId?: string): Promise<this> {
+    const client = new Client(url);
+    this.room = roomId ? await client.joinById(roomId, { name, ...options }) : await client.create(ROOM_NAME, { name, ...options });
     this.room.onMessage(ServerMsg.Role, (m: RoleMessage) => (this.role = m));
+    this.room.onMessage(ServerMsg.TaskList, (m: TaskListMessage) => (this.tasks = m));
+    this.room.onMessage(ServerMsg.TaskOpen, (m: TaskOpenMessage) => (this.lastOpen = m));
+    this.room.onMessage(ServerMsg.TaskClose, () => this.closes++);
     for (const t of [ServerMsg.Cooldowns, ServerMsg.Kill, ServerMsg.VentPop, ServerMsg.Search, ServerMsg.Results, ServerMsg.Error]) {
       this.room.onMessage(t, () => {});
     }
@@ -118,15 +136,15 @@ async function main(): Promise<void> {
   console.log(`Self-test against ${url}\n`);
   // Host: debug room, forced to Arch-Semen, bots fill to 10 so one kill doesn't end the round.
   const killer = await new TestClient().join("TestKiller", { debug: true, role: "arch-semen", bots: 10 });
-  const crew = await new TestClient().join("TestCrew");
+  const crew = await new TestClient().join("TestCrew", {}, killer.room.roomId);
   const startedAt = Date.now();
   killer.send(ClientMsg.Start);
   await sleep(500);
   check("host gets the forced debug role", killer.role?.characterId === "arch-semen", killer.role?.characterId);
   const crewChar = character(crew.role?.characterId ?? "");
   check("second player is dealt a role", !!crewChar, crew.role?.characterId);
-  if (crewChar?.role === "killer") {
-    console.log("\nSecond player was dealt a killer this time; re-run for the crew checks.");
+  if (crewChar?.role !== "regular") {
+    console.log(`\nSecond player was dealt ${crewChar?.name ?? "nothing"} this time; re-run for the crew checks.`);
     await killer.leave();
     await crew.leave();
     process.exit(failures ? 1 : 0);
@@ -146,6 +164,53 @@ async function main(): Promise<void> {
   killer.send(ClientMsg.Attack);
   await sleep(300);
   check("spawn protection blocks kills", crew.me.alive);
+
+  // ---------- Tasks ----------
+  check("crew gets 6 real tasks", crew.tasks.tasks.length === 6 && !crew.tasks.fake, `${crew.tasks.tasks.length}, fake=${crew.tasks.fake}`);
+  check("killer gets a fake task list", killer.tasks.fake && killer.tasks.tasks.length > 0);
+  const doneCount = () => crew.tasks.tasks.filter((t) => t.done).length;
+  const station = crew.tasks.tasks
+    .map((t) => hostelMap.tasks.get(t.id)!)
+    .filter((st) => st.floor === crew.me.floor)
+    .sort((a, b) => Math.hypot(a.x - crew.me.x, a.y - crew.me.y) - Math.hypot(b.x - crew.me.x, b.y - crew.me.y))[0];
+  crew.send(ClientMsg.TaskDone, { taskId: station.taskId });
+  await sleep(300);
+  check("TaskDone without opening the task is refused", doneCount() === 0);
+  if (Math.hypot(station.x - crew.me.x, station.y - crew.me.y) > TILE_SIZE * 3) {
+    crew.send(ClientMsg.Use);
+    await sleep(300);
+    check("USE far from the station doesn't open it", crew.lastOpen === null);
+  }
+  check(`crew can walk to the "${station.name}" station`, await crew.walkTo(station));
+  crew.send(ClientMsg.Use);
+  await sleep(300);
+  check("USE at the station opens its minigame", crew.lastOpen?.taskId === station.taskId, crew.lastOpen?.type);
+  crew.send(ClientMsg.TaskDone, { taskId: station.taskId });
+  await sleep(300);
+  check("finishing instantly is refused", doneCount() === 0);
+  crew.send(ClientMsg.Use);
+  await sleep(TASK_MIN_SECONDS * 1000 + 300);
+  crew.send(ClientMsg.TaskDone, { taskId: "not-a-task" });
+  crew.send(ClientMsg.TaskDone, { taskId: station.taskId });
+  await sleep(300);
+  check("finishing after playing counts", doneCount() === 1);
+  check("the crew progress bar moves", (crew.room.state as { taskProgress: number }).taskProgress > 0, `${Math.round((crew.room.state as { taskProgress: number }).taskProgress * 100)}%`);
+  crew.send(ClientMsg.TaskDone, { taskId: station.taskId });
+  await sleep(200);
+  check("a finished task can't be finished twice", doneCount() === 1);
+  // Open another task, then walk away: the server closes it.
+  const other = crew.tasks.tasks.find((t) => !t.done && hostelMap.tasks.get(t.id)!.floor === crew.me.floor);
+  if (other) {
+    const st = hostelMap.tasks.get(other.id)!;
+    await crew.walkTo(st);
+    crew.lastOpen = null;
+    const closesBefore = crew.closes;
+    crew.send(ClientMsg.Use);
+    await sleep(300);
+    await crew.walkTo(station);
+    await sleep(300);
+    check("walking away from an open task closes it", crew.lastOpen !== null && crew.closes > closesBefore);
+  }
 
   // Crew hides in the nearest corridor locker.
   const floor = hostelMap.floors.get(crew.me.floor)!;

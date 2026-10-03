@@ -6,4 +6,5 @@ import tasks from "./tasks.json";
 import { buildHostelMap } from "./buildMap";
 import type { LayoutDef, TaskDef } from "./buildMap";
 
-export const hostelMap = buildHostelMap(layout as unknown as LayoutDef, tasks as TaskDef[]);
+export const TASKS: TaskDef[] = tasks as TaskDef[];
+export const hostelMap = buildHostelMap(layout as unknown as LayoutDef, TASKS);

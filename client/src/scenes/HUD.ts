@@ -22,6 +22,7 @@ import { TouchControls } from "../input/touch";
 import { bakeMinimapTexture } from "../render/mapRenderer";
 import { net } from "../net";
 import type { GameScene } from "./Game";
+import { MinigameScene } from "./Minigame";
 
 const STATUS_FONT_PX = 14;
 const MARGIN_PX = 10;
@@ -31,8 +32,15 @@ const MINIMAP_MIN_PX_PER_TILE = 2;
 const MINIMAP_MAX_PX_PER_TILE = 4;
 const MINIMAP_SELF_COLOR = 0xffe066;
 const MINIMAP_SELF_RADIUS = 3;
+const MINIMAP_TASK_COLOR = 0xffe066;
+const MINIMAP_TASK_RADIUS = 2.5;
 
 const FEED_MAX_LINES = 4;
+const TASK_FONT_PX = 11;
+/** Crew progress bar width as a fraction of the screen width, and its height. */
+const PROGRESS_WIDTH_FRAC = 0.32;
+const PROGRESS_HEIGHT_PX = 14;
+const PROGRESS_COLOR = 0x3cb44b;
 const ROLE_COLORS: Record<string, string> = { killer: "#ff4d4d", savior: "#7fdbff", regular: "#9be564" };
 
 const textStyle = (px: number): Phaser.Types.GameObjects.Text.TextStyle => ({
@@ -58,6 +66,8 @@ function describeUse(t: UseTarget): { button: string; prompt: string } {
       return { button: "SEARCH", prompt: `Search the ${t.spot.type.replace(/-/g, " ")}` };
     case "vent":
       return { button: "VENT", prompt: "Jump into the vent" };
+    case "task":
+      return { button: "TASK", prompt: t.station.name };
   }
 }
 
@@ -90,6 +100,10 @@ export class HUDScene extends Phaser.Scene {
   private revealTitle!: Phaser.GameObjects.Text;
   private revealBody!: Phaser.GameObjects.Text;
   private cleanups: (() => void)[] = [];
+  private taskList!: Phaser.GameObjects.Text;
+  private minimapTasks!: Phaser.GameObjects.Graphics;
+  private progress!: Phaser.GameObjects.Graphics;
+  private progressLabel!: Phaser.GameObjects.Text;
 
   constructor() {
     super("HUD");
@@ -130,11 +144,24 @@ export class HUDScene extends Phaser.Scene {
     this.revealBody = this.add.text(0, 0, "", { ...textStyle(18), align: "center", wordWrap: { width: 600 } }).setOrigin(0.5, 0);
     this.reveal = this.add.container(0, 0, [this.revealBg, this.revealTitle, this.revealBody]).setDepth(10_000).setVisible(false);
 
+    this.taskList = this.add
+      .text(MARGIN_PX, MARGIN_PX + STATUS_FONT_PX * 2 + 18, "", {
+        ...textStyle(TASK_FONT_PX),
+        backgroundColor: "#00000066",
+        padding: { x: 6, y: 4 },
+        lineSpacing: 2,
+      });
+    this.progress = this.add.graphics();
+    this.minimapTasks = this.add.graphics();
+    this.progressLabel = this.add.text(0, 0, "", { ...textStyle(TASK_FONT_PX), fontStyle: "bold" }).setOrigin(0.5);
+
     this.cleanups = [
+      net.on("taskList", () => this.renderTaskList()),
       net.on("kill", (msg) => this.onKill(msg)),
       net.on("error", (text) => this.pushFeed(text)),
     ];
 
+    this.renderTaskList();
     this.layout();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -154,6 +181,31 @@ export class HUDScene extends Phaser.Scene {
     }
     const me = net.room?.state.players.get(net.sessionId);
     this.pushFeed(me && !me.alive ? `${msg.victimName} was eliminated` : "Someone was eliminated");
+  }
+
+  private renderTaskList(): void {
+    const { tasks, fake } = net.tasks;
+    if (tasks.length === 0) {
+      this.taskList.setText("").setVisible(false);
+      return;
+    }
+    const lines = tasks.map((t) => `${t.done ? "✓" : "☐"} ${t.name} · ${t.where}`);
+    const header = fake ? "FAKE TASKS (just pretend)" : `TASKS ${tasks.filter((t) => t.done).length}/${tasks.length}`;
+    this.taskList.setText([header, ...lines].join("\n")).setVisible(true);
+  }
+
+  private drawProgress(): void {
+    const { width } = this.scale;
+    const w = width * PROGRESS_WIDTH_FRAC;
+    const x = (width - w) / 2;
+    const y = MARGIN_PX;
+    const value = net.room?.state.taskProgress ?? 0;
+    this.progress.clear();
+    this.progress.fillStyle(0x000000, 0.6);
+    this.progress.fillRoundedRect(x - 2, y - 2, w + 4, PROGRESS_HEIGHT_PX + 4, 6);
+    this.progress.fillStyle(PROGRESS_COLOR, 1);
+    if (value > 0) this.progress.fillRoundedRect(x, y, Math.max(8, w * value), PROGRESS_HEIGHT_PX, 5);
+    this.progressLabel.setPosition(width / 2, y + PROGRESS_HEIGHT_PX / 2).setText(`CREW TASKS ${Math.round(value * 100)}%`);
   }
 
   private pushFeed(text: string): void {
@@ -198,7 +250,9 @@ export class HUDScene extends Phaser.Scene {
   }
 
   override update(): void {
+    this.touch?.setSuspended(MinigameScene.isOpen(this));
     this.touch?.draw();
+    this.drawProgress();
     this.banner.setVisible(net.reconnecting);
     const room = net.room;
     const game = this.scene.get("Game") as GameScene | undefined;
@@ -258,8 +312,16 @@ export class HUDScene extends Phaser.Scene {
       this.minimapFloor = me.floor;
       this.refreshMinimap();
     }
+    // Your unfinished task stations on the floor the minimap is showing.
+    const left = this.scale.width - MARGIN_PX - this.minimap.width;
+    this.minimapTasks.clear();
+    this.minimapTasks.fillStyle(MINIMAP_TASK_COLOR, 1);
+    for (const id of phase === GamePhase.Playing ? net.openTaskIds : []) {
+      const st = hostelMap.tasks.get(id);
+      if (!st || st.floor !== this.minimapFloor) continue;
+      this.minimapTasks.fillCircle(left + (st.x / TILE_SIZE) * this.pxPerTile, MARGIN_PX + (st.y / TILE_SIZE) * this.pxPerTile, MINIMAP_TASK_RADIUS);
+    }
     if (this.minimapFloor === me.floor) {
-      const left = this.scale.width - MARGIN_PX - this.minimap.width;
       const dotX = left + (me.x / TILE_SIZE) * this.pxPerTile;
       const dotY = MARGIN_PX + (me.y / TILE_SIZE) * this.pxPerTile;
       this.refreshMinimapDot(dotX, dotY);

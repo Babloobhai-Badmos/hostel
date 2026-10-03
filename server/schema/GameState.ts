@@ -44,6 +44,8 @@ export class GameState extends Schema {
   @type("string") hostId = "";
   /** Debug room (bots fill the gaps). Shown in the lobby. */
   @type("boolean") debug = false;
+  /** Crew task progress, 0..1: finished / assigned, over living regular players. */
+  @type("float32") taskProgress = 0;
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Body }) bodies = new MapSchema<Body>();
 }

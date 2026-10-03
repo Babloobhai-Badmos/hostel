@@ -2,7 +2,7 @@
 
 A chaotic multiplayer top-down browser game for 1–20 friends on the same WiFi or hotspot. One laptop runs the server; everyone else opens a URL in their phone or laptop browser. Nothing to install on the phones.
 
-**Current status: Phase 3 (roles and combat).** Lobby, two generated hostel floors, secret roles with a reveal screen, killers with melee attacks, bodies, ghosts, vision with line of sight, vents, hiding spots that killers can search, and a results screen. Tasks, abilities and chaos events come in later phases.
+**Current status: Phase 4 (tasks).** Lobby, two generated hostel floors, secret roles with a reveal screen, killers with melee attacks, bodies, ghosts, vision with line of sight, vents, hiding spots that killers can search, tasks with 9 touch-friendly minigames, a crew progress bar and a results screen. Special abilities, chaos events and audio polish come in later phases.
 
 ## Requirements
 
@@ -88,7 +88,29 @@ Everyone else is a regular Hosteller. Killers all look exactly like everyone els
 - **Ghosts:** dead players float through walls, see everything, and are invisible to the living.
 - **Vision:** the living see 6 tiles around them; killers see half that. Walls and solid furniture block sight.
 - **Vents:** killers can jump into a grate and pop out of the paired one, maybe on the other floor (8 s cooldown).
-- **Winning:** crew wins when every killer is dead or has left. Killers win when everyone else is dead, or killers are at least as many as everyone else alive. Phase 4 adds crew winning by finishing tasks.
+- **Winning:** crew wins when every killer is dead or has left, or when every living Hosteller has finished their tasks. Killers win when everyone else is dead, or killers are at least as many as everyone else alive.
+
+## Tasks
+
+Each regular Hosteller gets 6 of the 9 tasks below at random (listed top-left with the room and floor). Your unfinished stations pulse yellow on the map and show as yellow dots on the minimap. Walk up to one and press USE to open its minigame. You're still standing in the hostel while you play, so killers can get you; walking away or dying closes it.
+
+The bar at the top is the whole crew's progress. **When every living Hosteller has finished all their tasks, the crew wins.** Ghosts can still do their tasks for fun, but they no longer count. Killers get a fake list so they can pretend. The Supreme Leader has no tasks.
+
+| Task | Where | How to play |
+| --- | --- | --- |
+| Fill the water bottle | Washroom, F2 | Hold the button, let go in the green zone. 3 bottles. |
+| Charge your phone | Common Lounge, F2 | Remember 4 arrows (shown for 2 s), repeat them. Twice. |
+| Carry chai | Terrace, F3 | Tilt the phone (or drag / WASD) to carry the cup along the path without spilling. |
+| Knock on 303 | 303, F2 | Tap the door in time with 6 beats while the Gujju Rapper shouts through it. |
+| Measure the corridor | North Corridor, F2 | Tap MARK as the slider crosses each of the 5 red lines. |
+| Paint the wall | 421, F3 | Drag across the wall until it's 100% painted. |
+| Fight the ghost-demon | 309, F2 | Tap BONK as fast as you can before the bar drains. WOMP. |
+| Eat the laddus | 310, F2 | Eat all 10 laddus within 3 seconds. |
+| Teddy bear surgery | 311, F2 | Drag 5 pieces of stuffing out to the tray without touching the red bits. |
+
+Each minigame's file in `client/src/minigames/` starts with a comment explaining its controls and a `TUNING` block (speeds, zones, counts) you can edit to make it easier or harder. Tasks themselves (names, rooms, types) are in `shared/tasks.json`.
+
+On laptops: Space works for the hold/tap games, arrow keys for the pattern, WASD for the chai, and Esc closes a minigame.
 
 ## Testing alone (debug mode)
 
@@ -100,7 +122,7 @@ http://localhost:3000/?debug=1&bots=12               # fill up to 12
 http://localhost:3000/?debug=1&role=arch-semen       # and make the host Arch-Semen
 ```
 
-`role` takes any id from `shared/characters.json` (`arch-semen`, `kallu-koli`, `mota-dalla`, `laal-jhanda`, `supreme-leader`, `regular`). Debug options only count when the first person to join the room uses them.
+`role` takes any id from `shared/characters.json` (`arch-semen`, `kallu-koli`, `mota-dalla`, `laal-jhanda`, `supreme-leader`, `regular`). Debug options only count when the first person to join the room uses them. Bots don't play minigames; each living bot ticks off one of its tasks every 25 seconds so the progress bar still moves.
 
 ## The map
 
@@ -149,7 +171,7 @@ It prints server update rate (should stay ~20/s) and the worst gap between updat
 | `npm run build` | Build the client into `dist/client` |
 | `npm run typecheck` | TypeScript strict check of everything |
 | `npm run map` | Validate `layout.json` and print both floors as ASCII |
-| `npm run selftest` | With the server running: scripted round that checks hiding, searching, vents, spawn protection, ghosts and speed limits |
+| `npm run selftest` | With the server running: scripted round in its own room that checks tasks (wrong place, too fast, never opened), hiding, searching, vents, spawn protection, ghosts and speed limits |
 | `npm run tunnel` | Print tunnel fallback instructions |
 | `npm run sim -- [count] [seconds] [url]` | Headless bot load test |
 

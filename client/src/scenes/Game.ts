@@ -50,6 +50,7 @@ import type { PlayerView } from "../render/placeholderSprites";
 import { killEffect, searchEffect, ventPopEffect } from "../render/effects";
 import { net } from "../net";
 import type { HUDScene } from "./HUD";
+import { MinigameScene } from "./Minigame";
 
 /** Max inputs sent in one frame when catching up after a hitch. */
 const MAX_INPUT_CATCHUP = 3;
@@ -65,6 +66,9 @@ const FOG_MARGIN_PX = 200;
 const BODY_REVEAL_WAIT_MS = 1500;
 /** Spawn-protection bubble. */
 const SAFE_RING_COLOR = 0x7fdbff;
+/** Glow on your own unfinished task stations. */
+const TASK_GLOW_COLOR = 0xffe066;
+const TASK_GLOW_PULSE_MS = 800;
 
 interface RemotePlayer {
   view: PlayerView;
@@ -91,6 +95,8 @@ export class GameScene extends Phaser.Scene {
   private localView: PlayerView | null = null;
   private safeRing!: Phaser.GameObjects.Arc;
   private fog!: Phaser.GameObjects.Graphics;
+  /** taskId -> pulsing glow at its station (shown only for your own unfinished tasks on this floor). */
+  private taskGlows = new Map<string, Phaser.GameObjects.Arc>();
   private me: Player | null = null;
   private cleanups: (() => void)[] = [];
 
@@ -133,6 +139,16 @@ export class GameScene extends Phaser.Scene {
     this.keyboard = new KeyboardControls(this);
     this.safeRing = this.add.circle(0, 0, PLAYER_RADIUS_PX + 6, SAFE_RING_COLOR, 0.15).setStrokeStyle(2, SAFE_RING_COLOR, 0.8).setVisible(false);
     this.fog = this.add.graphics().setDepth(FOG_DEPTH);
+    this.taskGlows.clear();
+    for (const station of hostelMap.tasks.values()) {
+      const glow = this.add
+        .circle(station.x, station.y, TILE_SIZE * 0.4, TASK_GLOW_COLOR, 0.5)
+        .setStrokeStyle(3, TASK_GLOW_COLOR, 1)
+        .setDepth(station.y - TILE_SIZE)
+        .setVisible(false);
+      this.tweens.add({ targets: glow, scale: 1.6, alpha: 0.1, duration: TASK_GLOW_PULSE_MS, yoyo: true, repeat: -1 });
+      this.taskGlows.set(station.taskId, glow);
+    }
 
     this.fitCamera();
     this.scale.on(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
@@ -142,6 +158,10 @@ export class GameScene extends Phaser.Scene {
       net.on("kill", (msg) => this.onKill(msg)),
       net.on("ventPop", (msg) => msg.floor === this.currentFloor && ventPopEffect(this, msg.x, msg.y)),
       net.on("search", (msg) => msg.floor === this.currentFloor && searchEffect(this, msg.x, msg.y, msg.found)),
+      net.on("taskOpen", (msg) => {
+        if (!MinigameScene.isOpen(this)) this.scene.launch("Minigame", msg);
+      }),
+      net.on("taskClose", () => this.scene.stop("Minigame")),
     );
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -179,6 +199,7 @@ export class GameScene extends Phaser.Scene {
       ...s,
       isKiller: this.playing && c?.role === "killer",
       canVent: this.playing && !!c?.canVent,
+      openTasks: this.playing ? net.openTaskIds : [],
     });
   }
 
@@ -293,6 +314,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private markLanded(victimId: string): void {
+    const open = new Set(this.playing ? net.openTaskIds : []);
+    this.taskGlows.forEach((glow, taskId) => {
+      const station = hostelMap.tasks.get(taskId)!;
+      glow.setVisible(open.has(taskId) && station.floor === this.currentFloor);
+    });
+
     this.bodies.forEach((b) => {
       if (b.body.victimId === victimId) b.landed = true;
     });
@@ -374,6 +401,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleButtons(): void {
+    if (MinigameScene.isOpen(this)) return;
     const touch = this.hud()?.touch;
     const usePressed = Phaser.Input.Keyboard.JustDown(this.keyboard.use) || (touch?.consumePress("use") ?? false);
     if (usePressed && this.currentUseTarget()) net.room?.send(ClientMsg.Use);
@@ -403,8 +431,8 @@ export class GameScene extends Phaser.Scene {
       }
       this.previous = { ...this.predicted };
       const dir = this.currentInput();
-      // Standing still (or frozen) costs nothing: the server keeps us where we are.
-      if ((dir.x === 0 && dir.y === 0) || net.reconnecting || !this.canMove(me)) continue;
+      // Standing still (or frozen, or busy with a minigame) costs nothing: the server keeps us where we are.
+      if ((dir.x === 0 && dir.y === 0) || net.reconnecting || !this.canMove(me) || MinigameScene.isOpen(this)) continue;
       this.facing = Math.atan2(dir.y, dir.x);
       const input: InputMessage = { dx: dir.x, dy: dir.y, seq: ++this.seq };
       room.send(ClientMsg.Input, input);
@@ -470,6 +498,12 @@ export class GameScene extends Phaser.Scene {
         if (sample) r.pos = sample;
       }
       r.view.container.setVisible(show);
+    });
+
+    const open = new Set(this.playing ? net.openTaskIds : []);
+    this.taskGlows.forEach((glow, taskId) => {
+      const station = hostelMap.tasks.get(taskId)!;
+      glow.setVisible(open.has(taskId) && station.floor === this.currentFloor);
     });
 
     this.bodies.forEach((b) => {

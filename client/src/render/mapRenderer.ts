@@ -77,7 +77,8 @@ const VENT_SLAT = 0x6e7681;
 const SPAWN_COLOR = 0xf4c430;
 const SPAWN_ALPHA = 0.22;
 const TASK_COLOR = 0xffe066;
-const TASK_PULSE_MS = 900;
+/** Every station gets a faint static marker; the Game scene adds a pulsing glow on your own unfinished ones. */
+const TASK_IDLE_ALPHA = 0.35;
 const LABEL_ALPHA = 0.3;
 const LABEL_MIN_FONT_PX = 14;
 const LABEL_MAX_FONT_PX = 34;
@@ -184,7 +185,7 @@ export function bakeFloorTextures(scene: Phaser.Scene, map: HostelMap): void {
   }
 }
 
-/** The baked floor plus labels and pulsing task markers, in one container. */
+/** The baked floor plus labels and faint task markers, in one container. */
 export function createFloorView(scene: Phaser.Scene, floor: FloorMap): Phaser.GameObjects.Container {
   const ts = TILE_SIZE;
   const children: Phaser.GameObjects.GameObject[] = [
@@ -192,10 +193,7 @@ export function createFloorView(scene: Phaser.Scene, floor: FloorMap): Phaser.Ga
   ];
 
   for (const t of floor.tasks) {
-    const glow = scene.add.circle(t.x, t.y, ts * 0.45, TASK_COLOR, 0.35);
-    const dot = scene.add.circle(t.x, t.y, ts * 0.2, TASK_COLOR, 1).setStrokeStyle(2, 0x000000, 0.6);
-    scene.tweens.add({ targets: glow, scale: 1.5, alpha: 0.05, duration: TASK_PULSE_MS, yoyo: true, repeat: -1 });
-    children.push(glow, dot);
+    children.push(scene.add.circle(t.x, t.y, ts * 0.18, TASK_COLOR, TASK_IDLE_ALPHA).setStrokeStyle(2, 0x000000, 0.4));
   }
 
   for (const a of floor.areas) {

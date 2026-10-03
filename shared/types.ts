@@ -11,9 +11,12 @@ export const ClientMsg = {
   WhoAmI: "whoAmI",
   Attack: "attack",
   Use: "use",
+  /** Finished the minigame for the task the server opened. */
+  TaskDone: "taskDone",
+  /** Closed a minigame without finishing it. */
+  TaskCancel: "taskCancel",
   // Reserved for later phases:
   Ability: "ability",
-  TaskDone: "taskDone",
 } as const;
 export type ClientMsg = (typeof ClientMsg)[keyof typeof ClientMsg];
 
@@ -32,6 +35,12 @@ export const ServerMsg = {
   Search: "search",
   /** Broadcast: round over, roles revealed. */
   Results: "results",
+  /** Private: your task list (sent whenever it changes). */
+  TaskList: "taskList",
+  /** Private: the server accepted USE on a task station; open its minigame. */
+  TaskOpen: "taskOpen",
+  /** Private: close the open minigame (you moved away, died, or the round ended). */
+  TaskClose: "taskClose",
 } as const;
 export type ServerMsg = (typeof ServerMsg)[keyof typeof ServerMsg];
 
@@ -111,7 +120,35 @@ export interface ResultRow {
   role: string;
   alive: boolean;
   kills: number;
+  /** Real tasks done / assigned (0/0 for killers and the savior). */
+  tasksDone: number;
+  tasksTotal: number;
   bot: boolean;
+}
+
+export interface TaskEntry {
+  id: string;
+  name: string;
+  type: string;
+  /** Room label + floor, for the HUD list. */
+  where: string;
+  done: boolean;
+}
+
+export interface TaskListMessage {
+  tasks: TaskEntry[];
+  /** Killers get a fake list so they can pretend; their tasks never count. */
+  fake: boolean;
+}
+
+export interface TaskOpenMessage {
+  taskId: string;
+  type: string;
+  name: string;
+}
+
+export interface TaskDoneMessage {
+  taskId: string;
 }
 
 export interface ResultsMessage {

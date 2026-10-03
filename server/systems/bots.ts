@@ -33,6 +33,10 @@ export class BotSystem {
     return this.brains.has(id);
   }
 
+  ids(): string[] {
+    return [...this.brains.keys()];
+  }
+
   count(): number {
     return this.brains.size;
   }

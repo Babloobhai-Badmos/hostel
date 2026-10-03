@@ -18,7 +18,7 @@ import { REGULAR } from "../../shared/characters";
 import { useTarget } from "../../shared/interact";
 import { ClientMsg, GamePhase, ServerMsg } from "../../shared/types";
 import type { CooldownMessage, ErrorMessage, JoinOptions, ResultsMessage } from "../../shared/types";
-import { hostelMap } from "../../shared/world";
+import { TASKS, hostelMap } from "../../shared/world";
 import { GameState, Player } from "../schema/GameState";
 import { BotSystem } from "../systems/bots";
 import { CombatSystem } from "../systems/combat";
@@ -35,6 +35,7 @@ import { MovementSystem } from "../systems/movement";
 import type { MoveMode } from "../systems/movement";
 import { RoleSystem } from "../systems/roles";
 import { StairSystem } from "../systems/stairs";
+import { TaskSystem } from "../systems/tasks";
 import { teleport } from "../systems/teleport";
 import { VentSystem } from "../systems/vents";
 import { checkWin } from "../systems/win";
@@ -51,6 +52,7 @@ export class HostelRoom extends Room<GameState> {
   private combat!: CombatSystem;
   private vents!: VentSystem;
   private bots!: BotSystem;
+  private tasks!: TaskSystem;
   /** Debug settings from the host's join options. */
   private debugBots = DEBUG_DEFAULT_BOT_FILL;
   private debugRole = "";
@@ -66,8 +68,14 @@ export class HostelRoom extends Room<GameState> {
     this.hiding = new HidingSystem();
     this.roles = new RoleSystem();
     this.bots = new BotSystem(this.state, this.movement);
+    this.tasks = new TaskSystem(this.state, this.map, TASKS, this.roles);
     this.combat = new CombatSystem(this.state, this.map, this.roles, this.movement, this.hiding, {
-      onKill: (msg) => this.broadcast(ServerMsg.Kill, msg),
+      onKill: (msg) => {
+        this.broadcast(ServerMsg.Kill, msg);
+        // Killed mid-minigame: close it (as a ghost they can start it again).
+        this.tasks.cancel(msg.victimId);
+        this.clients.getById(msg.victimId)?.send(ServerMsg.TaskClose);
+      },
       onSearch: (msg) => this.broadcast(ServerMsg.Search, msg),
     });
     this.vents = new VentSystem(this.map, this.roles, this.movement, (msg) => this.broadcast(ServerMsg.VentPop, msg));
@@ -83,9 +91,11 @@ export class HostelRoom extends Room<GameState> {
     this.onMessage(ClientMsg.Attack, (client) => this.handleAttack(client));
     this.onMessage(ClientMsg.Start, (client) => this.handleStart(client));
     this.onMessage(ClientMsg.PlayAgain, (client) => this.handlePlayAgain(client));
+    this.onMessage(ClientMsg.TaskDone, (client, msg: unknown) => this.handleTaskDone(client, msg));
+    this.onMessage(ClientMsg.TaskCancel, (client) => this.tasks.cancel(client.sessionId));
 
     // Reserved for later phases. Registered so the server doesn't log warnings.
-    for (const msg of [ClientMsg.Ability, ClientMsg.TaskDone]) this.onMessage(msg, () => {});
+    for (const msg of [ClientMsg.Ability]) this.onMessage(msg, () => {});
   }
 
   override onJoin(client: Client, options: Partial<JoinOptions> = {}): void {
@@ -143,6 +153,7 @@ export class HostelRoom extends Room<GameState> {
     this.stairs.removePlayer(client.sessionId);
     this.combat.removePlayer(client.sessionId);
     this.vents.removePlayer(client.sessionId);
+    this.tasks.removePlayer(client.sessionId);
     ensureHost(this.state);
     console.log(`[room] ${player.name} left (${this.state.players.size}/${MAX_PLAYERS})`);
   }
@@ -157,18 +168,24 @@ export class HostelRoom extends Room<GameState> {
   private tick(): void {
     const playing = this.state.phase === GamePhase.Playing;
     const now = Date.now();
-    if (playing) this.bots.tick();
+    if (playing) {
+      this.bots.tick();
+      for (const id of this.bots.ids()) this.tasks.botTick(id, now);
+    }
     this.state.players.forEach((p) => {
       if (!p.connected) return;
       this.movement.tick(p, this.moveModeOf(p, playing), this.speedOf(p));
     });
     if (!playing) return;
     this.combat.tick(now);
+    this.closeStaleTasks();
+    // Deaths and disconnects change who counts towards the bar.
+    this.tasks.updateProgress();
     if (this.ending) return;
-    const win = checkWin(this.state, this.roles);
+    const win = checkWin(this.state, this.roles, this.tasks);
     if (win) {
       this.ending = true;
-      this.clock.setTimeout(() => this.endRound(checkWin(this.state, this.roles) ?? win), ROUND_END_DELAY_MS);
+      this.clock.setTimeout(() => this.endRound(checkWin(this.state, this.roles, this.tasks) ?? win), ROUND_END_DELAY_MS);
     }
   }
 
@@ -196,6 +213,7 @@ export class HostelRoom extends Room<GameState> {
   private sendPrivateInfo(client: Client): void {
     if (this.state.phase !== GamePhase.Lobby) {
       client.send(ServerMsg.Role, this.roles.messageFor(client.sessionId, (id) => this.nameOf(id)));
+      client.send(ServerMsg.TaskList, this.tasks.listFor(client.sessionId));
       this.sendCooldowns(client);
     }
     if (this.state.phase === GamePhase.Ended && this.lastResults) client.send(ServerMsg.Results, this.lastResults);
@@ -234,6 +252,7 @@ export class HostelRoom extends Room<GameState> {
       alive: player.alive,
       isKiller: playing && c?.role === "killer",
       canVent: playing && !!c?.canVent,
+      openTasks: playing ? this.tasks.openTaskIds(player.id) : [],
     });
     if (!target) return;
     const now = Date.now();
@@ -250,6 +269,11 @@ export class HostelRoom extends Room<GameState> {
       case "search":
         this.combat.trySearch(player, target.spot, now);
         break;
+      case "task": {
+        const open = this.tasks.start(player, target.station, now);
+        if (open) client.send(ServerMsg.TaskOpen, open);
+        break;
+      }
       case "hide":
         if (this.hiding.enter(player, target.spot) === "occupied") {
           this.sendError(client, "Someone's already hiding in there!");
@@ -259,6 +283,23 @@ export class HostelRoom extends Room<GameState> {
         break;
     }
     this.sendCooldowns(client);
+  }
+
+  private handleTaskDone(client: Client, msg: unknown): void {
+    const player = this.activePlayer(client);
+    if (!player || this.state.phase !== GamePhase.Playing) return;
+    const taskId = typeof msg === "object" && msg !== null ? (msg as { taskId?: unknown }).taskId : undefined;
+    if (this.tasks.complete(player, taskId, Date.now())) {
+      client.send(ServerMsg.TaskList, this.tasks.listFor(client.sessionId));
+    } else {
+      client.send(ServerMsg.TaskClose);
+    }
+  }
+
+  /** Close minigames for players who walked away, died mid-task, hid or vented. */
+  private closeStaleTasks(): void {
+    const stale = this.tasks.staleSessions((p) => !p.hidden && !p.venting);
+    for (const id of stale) this.clients.getById(id)?.send(ServerMsg.TaskClose);
   }
 
   private handleStart(client: Client): void {
@@ -281,6 +322,7 @@ export class HostelRoom extends Room<GameState> {
     const ids = [...this.state.players.keys()];
     const forced = this.state.debug && this.debugRole ? { id: this.state.hostId, characterId: this.debugRole } : undefined;
     this.roles.assign(ids, forced);
+    this.tasks.assign(ids);
     this.hiding.reset(this.state.players.values());
     this.vents.reset();
     this.state.bodies.clear();
@@ -311,6 +353,7 @@ export class HostelRoom extends Room<GameState> {
     if (this.state.phase !== GamePhase.Playing) return;
     this.ending = false;
     this.state.phase = GamePhase.Ended;
+    for (const c of this.clients) c.send(ServerMsg.TaskClose);
     this.vents.reset();
     const players = this.roles.ids().flatMap((id) => {
       const p = this.state.players.get(id);
@@ -322,6 +365,8 @@ export class HostelRoom extends Room<GameState> {
         role: c.role,
         alive: p.alive,
         kills: this.combat.killsOf(id),
+        tasksDone: this.tasks.counts(id).done,
+        tasksTotal: this.tasks.counts(id).total,
         bot: this.bots.isBot(id),
       }];
     });
@@ -334,6 +379,7 @@ export class HostelRoom extends Room<GameState> {
     if (client.sessionId !== this.state.hostId || this.state.phase !== GamePhase.Ended) return;
     this.bots.removeAll();
     this.roles.clear();
+    this.tasks.clear();
     this.hiding.reset(this.state.players.values());
     this.state.bodies.clear();
     this.lastResults = null;
