@@ -5,150 +5,62 @@
 // Clients walk around using the shared map (breadth-first search over tiles),
 // exactly like a player holding the joystick would.
 
-import { Client, Room } from "colyseus.js";
 import {
   BASE_SPEED_PX_PER_SEC,
   INPUT_SEND_MS,
   ROLE_REVEAL_SECONDS,
-  ROOM_NAME,
-  SERVER_PORT,
   SPAWN_PROTECTION_SECONDS,
   TASK_MIN_SECONDS,
-  TICK_DT,
   TILE_SIZE,
 } from "../shared/constants";
 import { character } from "../shared/characters";
 import { hostelMap } from "../shared/world";
 import { ClientMsg, ServerMsg } from "../shared/types";
-import type { RoleMessage, TaskListMessage, TaskOpenMessage, Vec2 } from "../shared/types";
+import { DEFAULT_URL, TestClient, sleep } from "./testClient";
 
-const url = process.argv[2] ?? `ws://localhost:${SERVER_PORT}`;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Usage: npm run selftest -- [url|-] [scenario]   (scenario: core | dash | wide | gas | gujju)
+const url = process.argv[2] && process.argv[2] !== "-" ? process.argv[2] : DEFAULT_URL;
 let failures = 0;
 function check(name: string, ok: boolean, detail = ""): void {
   if (!ok) failures++;
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  (${detail})` : ""}`);
 }
 
-interface PlayerView {
-  x: number;
-  y: number;
-  floor: number;
-  alive: boolean;
-  hidden: boolean;
-  venting: boolean;
-}
-
-class TestClient {
-  room!: Room;
-  role: RoleMessage | null = null;
-  tasks: TaskListMessage = { tasks: [], fake: false };
-  lastOpen: TaskOpenMessage | null = null;
-  closes = 0;
-  private seq = 0;
-
-  /** Without `roomId`, creates a brand-new room so the test never lands in a real game. */
-  async join(name: string, options: Record<string, unknown> = {}, roomId?: string): Promise<this> {
-    const client = new Client(url);
-    this.room = roomId ? await client.joinById(roomId, { name, ...options }) : await client.create(ROOM_NAME, { name, ...options });
-    this.room.onMessage(ServerMsg.Role, (m: RoleMessage) => (this.role = m));
-    this.room.onMessage(ServerMsg.TaskList, (m: TaskListMessage) => (this.tasks = m));
-    this.room.onMessage(ServerMsg.TaskOpen, (m: TaskOpenMessage) => (this.lastOpen = m));
-    this.room.onMessage(ServerMsg.TaskClose, () => this.closes++);
-    for (const t of [ServerMsg.Cooldowns, ServerMsg.Kill, ServerMsg.VentPop, ServerMsg.Search, ServerMsg.Results, ServerMsg.Error]) {
-      this.room.onMessage(t, () => {});
+/**
+ * A fresh room: the host forced to `hostRole`, a second client that must be
+ * dealt a Hosteller (retries with a new room otherwise), bots up to 10 (so
+ * the Gujju Rapper is in and one kill doesn't end the round).
+ */
+async function setupRoom(hostRole: string, tries = 6): Promise<{ host: TestClient; crew: TestClient; startedAt: number } | null> {
+  for (let i = 0; i < tries; i++) {
+    const host = await new TestClient(url).join("TestHost", { debug: true, role: hostRole, bots: 10 });
+    const crew = await new TestClient(url).join("TestCrew", {}, host.room.roomId);
+    const startedAt = Date.now();
+    host.send(ClientMsg.Start);
+    await sleep(500);
+    if (host.role?.characterId === hostRole && character(crew.role?.characterId ?? "")?.role === "regular") {
+      return { host, crew, startedAt };
     }
-    await sleep(200);
-    return this;
+    await host.leave();
+    await crew.leave();
   }
-
-  get me(): PlayerView {
-    return this.room.state.players.get(this.room.sessionId) as PlayerView;
-  }
-
-  send(type: string, msg?: unknown): void {
-    this.room.send(type, msg);
-  }
-
-  input(dx: number, dy: number): void {
-    this.room.send(ClientMsg.Input, { dx, dy, seq: ++this.seq });
-  }
-
-  /** Walk to a pixel position on the current floor along a tile path. */
-  async walkTo(target: Vec2, timeoutMs = 30_000): Promise<boolean> {
-    const floor = hostelMap.floors.get(this.me.floor)!;
-    const path = tilePath(floor.grid, this.me, target);
-    if (!path) return false;
-    const waypoints = [...path.map((t) => ({ x: (t.x + 0.5) * TILE_SIZE, y: (t.y + 0.5) * TILE_SIZE })), target];
-    const deadline = Date.now() + timeoutMs;
-    for (const wp of waypoints) {
-      while (Date.now() < deadline) {
-        const dx = wp.x - this.me.x;
-        const dy = wp.y - this.me.y;
-        const d = Math.hypot(dx, dy);
-        if (d < 4) break;
-        // Don't overshoot: scale the last step down.
-        const stepPx = BASE_SPEED_PX_PER_SEC * TICK_DT;
-        const k = Math.min(1, d / stepPx);
-        this.input((dx / d) * k, (dy / d) * k);
-        await sleep(INPUT_SEND_MS);
-      }
-    }
-    await sleep(150);
-    return Math.hypot(target.x - this.me.x, target.y - this.me.y) < TILE_SIZE / 2;
-  }
-
-  leave(): Promise<number> {
-    return this.room.leave();
-  }
-}
-
-/** Breadth-first search over walkable tiles. */
-function tilePath(grid: { width: number; height: number; solid: Uint8Array }, from: Vec2, to: Vec2): Vec2[] | null {
-  const key = (x: number, y: number) => y * grid.width + x;
-  const sx = Math.floor(from.x / TILE_SIZE);
-  const sy = Math.floor(from.y / TILE_SIZE);
-  const tx = Math.floor(to.x / TILE_SIZE);
-  const ty = Math.floor(to.y / TILE_SIZE);
-  const prev = new Map<number, number>([[key(sx, sy), -1]]);
-  const queue = [key(sx, sy)];
-  while (queue.length) {
-    const k = queue.shift()!;
-    const x = k % grid.width;
-    const y = Math.floor(k / grid.width);
-    if (x === tx && y === ty) {
-      const out: Vec2[] = [];
-      for (let c = k; c !== -1; c = prev.get(c)!) out.unshift({ x: c % grid.width, y: Math.floor(c / grid.width) });
-      return out;
-    }
-    for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
-      if (nx < 0 || ny < 0 || nx >= grid.width || ny >= grid.height) continue;
-      const nk = key(nx, ny);
-      if (grid.solid[nk] || prev.has(nk)) continue;
-      prev.set(nk, k);
-      queue.push(nk);
-    }
-  }
+  console.log(`  (couldn't get a Hosteller second player after ${tries} rooms)`);
   return null;
 }
 
-async function main(): Promise<void> {
-  console.log(`Self-test against ${url}\n`);
-  // Host: debug room, forced to Arch-Semen, bots fill to 10 so one kill doesn't end the round.
-  const killer = await new TestClient().join("TestKiller", { debug: true, role: "arch-semen", bots: 10 });
-  const crew = await new TestClient().join("TestCrew", {}, killer.room.roomId);
-  const startedAt = Date.now();
-  killer.send(ClientMsg.Start);
-  await sleep(500);
+const sinceStart = (startedAt: number) => Date.now() - startedAt;
+/** Wait until the reveal is over (and optionally spawn protection too). */
+async function waitPlaying(startedAt: number, protection = false): Promise<void> {
+  const ms = ROLE_REVEAL_SECONDS * 1000 + (protection ? SPAWN_PROTECTION_SECONDS * 1000 : 0) + 300;
+  if (sinceStart(startedAt) < ms) await sleep(ms - sinceStart(startedAt));
+}
+
+async function coreScenario(): Promise<void> {
+  console.log("--- Core: tasks, hiding, combat, vents ---");
+  const setup = await setupRoom("arch-semen");
+  if (!setup) return check("core scenario set up", false);
+  const { host: killer, crew, startedAt } = setup;
   check("host gets the forced debug role", killer.role?.characterId === "arch-semen", killer.role?.characterId);
-  const crewChar = character(crew.role?.characterId ?? "");
-  check("second player is dealt a role", !!crewChar, crew.role?.characterId);
-  if (crewChar?.role !== "regular") {
-    console.log(`\nSecond player was dealt ${crewChar?.name ?? "nothing"} this time; re-run for the crew checks.`);
-    await killer.leave();
-    await crew.leave();
-    process.exit(failures ? 1 : 0);
-  }
 
   // Inputs during the reveal are ignored.
   const before = { ...crew.me };
@@ -276,6 +188,150 @@ async function main(): Promise<void> {
 
   await killer.leave();
   await crew.leave();
+}
+
+async function dashScenario(): Promise<void> {
+  console.log("--- Arch-Semen: dash ---");
+  const setup = await setupRoom("arch-semen");
+  if (!setup) return check("dash scenario set up", false);
+  const { host, crew, startedAt } = setup;
+  await waitPlaying(startedAt);
+  await host.walkTo(hostelMap.tasks.get("measure")!); // the long North Corridor
+  const t0 = host.me.x;
+  for (let i = 0; i < 8; i++) {
+    host.input(1, 0);
+    await sleep(INPUT_SEND_MS);
+  }
+  await sleep(150);
+  const normal = host.me.x - t0;
+  host.send(ClientMsg.Ability);
+  await sleep(60);
+  check("dash starts", host.me.dashing === true);
+  const t1 = host.me.x;
+  for (let i = 0; i < 8; i++) {
+    host.input(-1, 0);
+    await sleep(INPUT_SEND_MS);
+  }
+  await sleep(150);
+  const dashed = t1 - host.me.x;
+  check("dashing covers more ground", dashed > normal * 1.4, `${Math.round(dashed)}px vs ${Math.round(normal)}px`);
+  await sleep(300);
+  check("dash ends by itself", host.me.dashing === false);
+  host.send(ClientMsg.Ability);
+  await sleep(100);
+  check("dash has a cooldown", host.me.dashing === false);
+  await host.leave();
+  await crew.leave();
+}
+
+async function wideScenario(): Promise<void> {
+  console.log("--- Kallu Koli: wide swing ---");
+  const setup = await setupRoom("kallu-koli");
+  if (!setup) return check("wide scenario set up", false);
+  const { host, crew, startedAt } = setup;
+  let wideArmed = false;
+  host.room.onMessage(ServerMsg.Cooldowns, (m: { wideArmed: boolean }) => (wideArmed = m.wideArmed));
+  await waitPlaying(startedAt, true);
+  await crew.walkTo({ x: host.me.x + TILE_SIZE, y: host.me.y });
+  host.input(1, 0); // face the crew player
+  await sleep(150);
+  host.send(ClientMsg.Ability);
+  await sleep(200);
+  check("ability arms the wide swing", wideArmed);
+  host.send(ClientMsg.Attack);
+  await sleep(300);
+  check("the wide swing kills", !crew.me.alive);
+  check("the wide swing is used up", !wideArmed);
+  await host.leave();
+  await crew.leave();
+}
+
+async function gasScenario(): Promise<void> {
+  console.log("--- Mota-dalla: poison gas ---");
+  const setup = await setupRoom("mota-dalla");
+  if (!setup) return check("gas scenario set up", false);
+  const { host, crew, startedAt } = setup;
+  await waitPlaying(startedAt, true);
+  // Mota walks into the corridor, away from the crowd of bots at spawn; the
+  // crew player waits a few tiles away (the cloud only lasts 4 s).
+  const spot = hostelMap.tasks.get("measure")!;
+  await host.walkTo(spot);
+  await crew.walkTo({ x: spot.x + TILE_SIZE * 4, y: spot.y });
+  host.send(ClientMsg.Ability);
+  await sleep(200);
+  const gas = [...(host.room.state as { gas: Map<string, { x: number; y: number }> }).gas.values()][0];
+  check("gas cloud appears", !!gas);
+  check("killers are immune to their own gas", host.me.alive);
+  check("crew can walk into the gas", await crew.walkTo({ x: host.me.x + TILE_SIZE * 0.5, y: host.me.y }));
+  await sleep(200);
+  check("the gas kills crew who walk in", !crew.me.alive);
+  await sleep(4200);
+  check("the gas fades", (host.room.state as { gas: Map<string, unknown> }).gas.size === 0);
+  await host.leave();
+  await crew.leave();
+}
+
+async function gujjuScenario(): Promise<void> {
+  console.log("--- Gujju Rapper, Supreme Leader revive + shield ---");
+  const setup = await setupRoom("supreme-leader");
+  if (!setup) return check("gujju scenario set up", false);
+  const { host, crew, startedAt } = setup;
+  const npcs = () => [...(host.room.state as { npcs: Map<string, { x: number; y: number; mood: string }> }).npcs.values()];
+  check("the Gujju Rapper is in the hostel (10 players)", npcs().length === 1);
+  await waitPlaying(startedAt, true);
+  const knock = hostelMap.tasks.get("knock")!;
+  const hadKnock = crew.tasks.tasks.some((t) => t.id === "knock");
+  if (!hadKnock) {
+    console.log("  (crew wasn't dealt the knock task this time; skipping the Gujju checks)");
+    await host.leave();
+    await crew.leave();
+    return;
+  }
+  check("crew can walk to the 303 door task", await crew.walkTo(knock));
+  crew.send(ClientMsg.Use);
+  await sleep(400);
+  check("knocking wakes him up", npcs()[0]?.mood === "awake", npcs()[0]?.mood);
+  let stunnedSeen = false;
+  for (let i = 0; i < 60 && crew.me.alive; i++) {
+    if (crew.me.stunned) stunnedSeen = true;
+    await sleep(100);
+  }
+  check("the beat stuns the knocker", stunnedSeen);
+  check("then he finishes them off", !crew.me.alive);
+  const body = [...(host.room.state as { bodies: Map<string, { id: string; x: number; y: number }> }).bodies.values()][0];
+  check("a body is left in 303", !!body);
+  // Supreme Leader walks over (after the stun is over) and holds USE on the body.
+  await sleep(1500);
+  check("Supreme Leader can reach the body", await host.walkTo({ x: body.x + TILE_SIZE * 0.6, y: body.y }));
+  host.send(ClientMsg.ReviveStart);
+  await sleep(1500);
+  host.send(ClientMsg.ReviveCancel);
+  await sleep(300);
+  check("letting go early doesn't revive", !crew.me.alive);
+  host.send(ClientMsg.ReviveStart);
+  await sleep(3400);
+  check("holding for 3 s revives them", crew.me.alive);
+  check("the body is gone", (host.room.state as { bodies: Map<string, unknown> }).bodies.size === 0);
+  // Shield: the closest player (the revived crew) gets it.
+  await crew.walkTo({ x: host.me.x + TILE_SIZE, y: host.me.y });
+  host.send(ClientMsg.Ability);
+  await sleep(300);
+  check("shield protects the nearest player", crew.me.safe === true);
+  await host.leave();
+  await crew.leave();
+}
+
+async function main(): Promise<void> {
+  console.log(`Self-test against ${url}\n`);
+  const only = process.argv[3];
+  const scenarios: [string, () => Promise<void>][] = [
+    ["core", coreScenario],
+    ["dash", dashScenario],
+    ["wide", wideScenario],
+    ["gas", gasScenario],
+    ["gujju", gujjuScenario],
+  ];
+  for (const [name, run] of scenarios) if (!only || only === name) await run();
   console.log(failures ? `\n${failures} check(s) failed.` : "\nAll checks passed.");
   process.exit(failures ? 1 : 0);
 }

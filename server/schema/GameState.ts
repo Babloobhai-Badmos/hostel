@@ -18,8 +18,12 @@ export class Player extends Schema {
   @type("boolean") hidden = false;
   /** Travelling through a vent: invisible and can't move. */
   @type("boolean") venting = false;
-  /** Can't be killed right now (spawn protection; later the Supreme Leader's shield). */
+  /** Can't be killed right now (spawn protection or the Supreme Leader's shield). */
   @type("boolean") safe = false;
+  /** Frozen by the Gujju Rapper's beat: can't move or act, but can still be killed. */
+  @type("boolean") stunned = false;
+  /** Arch-Semen mid-dash (everyone sees the speed; clients predict with it). */
+  @type("boolean") dashing = false;
   /** Bumped on every teleport (stairs, vents, round start) so clients snap instead of sliding. */
   @type("uint8") tp = 0;
   /** Index into PLAYER_COLORS. */
@@ -29,7 +33,28 @@ export class Player extends Schema {
   @type("uint32") ack = 0;
 }
 
-/** A dead body. Bodies are never cleared during a round. */
+/** A computer-controlled character (the Gujju Rapper). */
+export class Npc extends Schema {
+  @type("string") id = "";
+  @type("string") name = "";
+  @type("uint8") floor = 0;
+  @type("float32") x = 0;
+  @type("float32") y = 0;
+  /** idle | awake | hunting | returning (drives the speech bubble). */
+  @type("string") mood = "idle";
+}
+
+/** Mota-dalla's poison cloud: kills non-killers who enter it until it fades. */
+export class Gas extends Schema {
+  @type("string") id = "";
+  @type("uint8") floor = 0;
+  @type("float32") x = 0;
+  @type("float32") y = 0;
+  /** Pixels. */
+  @type("float32") radius = 0;
+}
+
+/** A dead body. Bodies are never cleared during a round (a revive removes one). */
 export class Body extends Schema {
   @type("string") id = "";
   @type("string") victimId = "";
@@ -48,4 +73,6 @@ export class GameState extends Schema {
   @type("float32") taskProgress = 0;
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Body }) bodies = new MapSchema<Body>();
+  @type({ map: Npc }) npcs = new MapSchema<Npc>();
+  @type({ map: Gas }) gas = new MapSchema<Gas>();
 }

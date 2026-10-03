@@ -14,14 +14,16 @@ import {
   ROUND_END_DELAY_MS,
   TICK_MS,
 } from "../../shared/constants";
-import { REGULAR } from "../../shared/characters";
+import { GUJJU_RAPPER_ID, REGULAR } from "../../shared/characters";
 import { useTarget } from "../../shared/interact";
 import { ClientMsg, GamePhase, ServerMsg } from "../../shared/types";
-import type { CooldownMessage, ErrorMessage, JoinOptions, ResultsMessage } from "../../shared/types";
+import type { CooldownMessage, ErrorMessage, FxMessage, JoinOptions, ResultsMessage } from "../../shared/types";
 import { TASKS, hostelMap } from "../../shared/world";
 import { GameState, Player } from "../schema/GameState";
+import { AbilitySystem } from "../systems/abilities";
 import { BotSystem } from "../systems/bots";
 import { CombatSystem } from "../systems/combat";
+import { GujjuSystem } from "../systems/gujju";
 import { HidingSystem } from "../systems/hiding";
 import {
   ensureHost,
@@ -53,6 +55,8 @@ export class HostelRoom extends Room<GameState> {
   private vents!: VentSystem;
   private bots!: BotSystem;
   private tasks!: TaskSystem;
+  private abilities!: AbilitySystem;
+  private gujju!: GujjuSystem;
   /** Debug settings from the host's join options. */
   private debugBots = DEBUG_DEFAULT_BOT_FILL;
   private debugRole = "";
@@ -72,12 +76,16 @@ export class HostelRoom extends Room<GameState> {
     this.combat = new CombatSystem(this.state, this.map, this.roles, this.movement, this.hiding, {
       onKill: (msg) => {
         this.broadcast(ServerMsg.Kill, msg);
-        // Killed mid-minigame: close it (as a ghost they can start it again).
+        // Killed mid-minigame or mid-revive: stop it (as a ghost they can start tasks again).
         this.tasks.cancel(msg.victimId);
+        this.abilities.reviveCancel(msg.victimId);
         this.clients.getById(msg.victimId)?.send(ServerMsg.TaskClose);
       },
       onSearch: (msg) => this.broadcast(ServerMsg.Search, msg),
     });
+    const fx = (msg: FxMessage) => this.broadcast(ServerMsg.Fx, msg);
+    this.abilities = new AbilitySystem(this.state, this.roles, this.movement, this.combat, fx);
+    this.gujju = new GujjuSystem(this.state, this.map, this.combat, fx);
     this.vents = new VentSystem(this.map, this.roles, this.movement, (msg) => this.broadcast(ServerMsg.VentPop, msg));
 
     this.setPatchRate(TICK_MS);
@@ -93,9 +101,9 @@ export class HostelRoom extends Room<GameState> {
     this.onMessage(ClientMsg.PlayAgain, (client) => this.handlePlayAgain(client));
     this.onMessage(ClientMsg.TaskDone, (client, msg: unknown) => this.handleTaskDone(client, msg));
     this.onMessage(ClientMsg.TaskCancel, (client) => this.tasks.cancel(client.sessionId));
-
-    // Reserved for later phases. Registered so the server doesn't log warnings.
-    for (const msg of [ClientMsg.Ability]) this.onMessage(msg, () => {});
+    this.onMessage(ClientMsg.Ability, (client) => this.handleAbility(client));
+    this.onMessage(ClientMsg.ReviveStart, (client) => this.handleReviveStart(client));
+    this.onMessage(ClientMsg.ReviveCancel, (client) => this.abilities.reviveCancel(client.sessionId));
   }
 
   override onJoin(client: Client, options: Partial<JoinOptions> = {}): void {
@@ -154,6 +162,7 @@ export class HostelRoom extends Room<GameState> {
     this.combat.removePlayer(client.sessionId);
     this.vents.removePlayer(client.sessionId);
     this.tasks.removePlayer(client.sessionId);
+    this.abilities.removePlayer(client.sessionId);
     ensureHost(this.state);
     console.log(`[room] ${player.name} left (${this.state.players.size}/${MAX_PLAYERS})`);
   }
@@ -178,6 +187,8 @@ export class HostelRoom extends Room<GameState> {
     });
     if (!playing) return;
     this.combat.tick(now);
+    this.abilities.tick(now);
+    this.gujju.tick(now);
     this.closeStaleTasks();
     // Deaths and disconnects change who counts towards the bar.
     this.tasks.updateProgress();
@@ -193,13 +204,13 @@ export class HostelRoom extends Room<GameState> {
     if (this.state.phase === GamePhase.Reveal || this.state.phase === GamePhase.Ended) return "frozen";
     if (!p.alive) return "ghost";
     if (!playing) return "walk"; // lobby
-    if (p.hidden || p.venting) return "frozen";
+    if (p.hidden || p.venting || p.stunned) return "frozen";
     return "walk";
   }
 
   private speedOf(p: Player): number {
     if (!p.alive) return GHOST_SPEED_MULTIPLIER;
-    return (this.roles.get(p.id) ?? REGULAR).speed;
+    return (this.roles.get(p.id) ?? REGULAR).speed * this.abilities.speedMultiplier(p.id, Date.now());
   }
 
   // ---------- Messages ----------
@@ -226,6 +237,9 @@ export class HostelRoom extends Room<GameState> {
       attack: this.combat.attackReadyIn(id, now),
       vent: this.vents.readyIn(id, now),
       search: this.combat.searchReadyIn(id, now),
+      ability: this.abilities.readyIn(id, now),
+      wideArmed: this.abilities.isWideArmed(id, now),
+      reviveUsed: !this.abilities.hasRevive(id),
       protection: this.combat.protectionLeft(id, now),
     };
     client.send(ServerMsg.Cooldowns, msg);
@@ -234,17 +248,36 @@ export class HostelRoom extends Room<GameState> {
   private handleAttack(client: Client): void {
     const player = this.activePlayer(client);
     if (!player || this.state.phase !== GamePhase.Playing) return;
-    this.combat.tryAttack(player, Date.now());
+    const now = Date.now();
+    const wide = this.abilities.isWideArmed(player.id, now);
+    const hits = this.combat.tryAttack(player, now, wide);
+    if (hits > 0 && wide) {
+      this.abilities.consumeWide(player.id);
+      this.broadcast(ServerMsg.Fx, { kind: "wide", floor: player.floor, x: player.x, y: player.y, angle: this.movement.facing(player.id) } satisfies FxMessage);
+    }
     this.sendCooldowns(client);
   }
 
-  /** USE is context-sensitive; the server works out the target itself from the player's position. */
-  private handleUse(client: Client): void {
+  private handleAbility(client: Client): void {
     const player = this.activePlayer(client);
-    if (!player || player.venting) return;
+    if (!player || this.state.phase !== GamePhase.Playing) return;
+    this.abilities.use(player, Date.now());
+    this.sendCooldowns(client);
+  }
+
+  private handleReviveStart(client: Client): void {
+    const player = this.activePlayer(client);
+    if (!player || this.state.phase !== GamePhase.Playing) return;
+    const target = useTarget(this.map, this.actorFor(player));
+    if (target?.kind === "revive") this.abilities.reviveStart(player, target.body.id, Date.now());
+  }
+
+  /** The useTarget() view of a player, with what their role allows right now. */
+  private actorFor(player: Player) {
     const playing = this.state.phase === GamePhase.Playing;
     const c = this.roles.get(player.id);
-    const target = useTarget(this.map, {
+    const revivable = playing && player.alive && this.abilities.hasRevive(player.id) ? [...this.state.bodies.values()] : [];
+    return {
       floor: player.floor,
       x: player.x,
       y: player.y,
@@ -253,7 +286,15 @@ export class HostelRoom extends Room<GameState> {
       isKiller: playing && c?.role === "killer",
       canVent: playing && !!c?.canVent,
       openTasks: playing ? this.tasks.openTaskIds(player.id) : [],
-    });
+      revivable,
+    };
+  }
+
+  /** USE is context-sensitive; the server works out the target itself from the player's position. */
+  private handleUse(client: Client): void {
+    const player = this.activePlayer(client);
+    if (!player || player.venting || player.stunned) return;
+    const target = useTarget(this.map, this.actorFor(player));
     if (!target) return;
     const now = Date.now();
     switch (target.kind) {
@@ -272,8 +313,13 @@ export class HostelRoom extends Room<GameState> {
       case "task": {
         const open = this.tasks.start(player, target.station, now);
         if (open) client.send(ServerMsg.TaskOpen, open);
+        // Knocking in the Gujju Rapper's room wakes him up.
+        if (open && target.station.area === this.gujju.homeKey) this.gujju.onKnock(player, now);
         break;
       }
+      case "revive":
+        // Reviving is hold-to-use: the client sends ReviveStart / ReviveCancel instead.
+        break;
       case "hide":
         if (this.hiding.enter(player, target.spot) === "occupied") {
           this.sendError(client, "Someone's already hiding in there!");
@@ -323,6 +369,9 @@ export class HostelRoom extends Room<GameState> {
     const forced = this.state.debug && this.debugRole ? { id: this.state.hostId, characterId: this.debugRole } : undefined;
     this.roles.assign(ids, forced);
     this.tasks.assign(ids);
+    this.abilities.reset();
+    if (this.roles.npcs.some((n) => n.id === GUJJU_RAPPER_ID)) this.gujju.spawn();
+    else this.gujju.despawn();
     this.hiding.reset(this.state.players.values());
     this.vents.reset();
     this.state.bodies.clear();
@@ -353,6 +402,7 @@ export class HostelRoom extends Room<GameState> {
     if (this.state.phase !== GamePhase.Playing) return;
     this.ending = false;
     this.state.phase = GamePhase.Ended;
+    this.abilities.reset();
     for (const c of this.clients) c.send(ServerMsg.TaskClose);
     this.vents.reset();
     const players = this.roles.ids().flatMap((id) => {
@@ -380,12 +430,15 @@ export class HostelRoom extends Room<GameState> {
     this.bots.removeAll();
     this.roles.clear();
     this.tasks.clear();
+    this.abilities.reset();
+    this.gujju.despawn();
     this.hiding.reset(this.state.players.values());
     this.state.bodies.clear();
     this.lastResults = null;
     for (const [p, s] of spawnAssignments(this.state, this.map.spawns)) {
       p.alive = true;
       p.safe = false;
+      p.stunned = false;
       p.venting = false;
       teleport(p, this.map.spawnFloor, s.x, s.y, this.movement);
     }

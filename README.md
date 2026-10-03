@@ -2,7 +2,7 @@
 
 A chaotic multiplayer top-down browser game for 1–20 friends on the same WiFi or hotspot. One laptop runs the server; everyone else opens a URL in their phone or laptop browser. Nothing to install on the phones.
 
-**Current status: Phase 4 (tasks).** Lobby, two generated hostel floors, secret roles with a reveal screen, killers with melee attacks, bodies, ghosts, vision with line of sight, vents, hiding spots that killers can search, tasks with 9 touch-friendly minigames, a crew progress bar and a results screen. Special abilities, chaos events and audio polish come in later phases.
+**Current status: Phase 5 (abilities).** Lobby, two generated hostel floors, secret roles with a reveal screen, killers with melee attacks and special abilities, the Gujju Rapper NPC in room 303, the Supreme Leader's revive and shield, bodies, ghosts, vision with line of sight, vents, hiding spots, tasks with 9 minigames, a crew progress bar and a results screen. Chaos events, audio polish and juice come in phase 7.
 
 ## Requirements
 
@@ -66,6 +66,8 @@ It prints an `https://<random-words>.trycloudflare.com` URL. Send that to everyo
 | Move | Left thumb anywhere on the left half (floating joystick) | WASD / arrow keys |
 | Use (stairs, hide, climb out, vent, search) | USE button (lights up and relabels when something is in reach) | E |
 | Attack (killers) | ATTACK button (lights up when someone is in reach) | Space |
+| Ability (DASH / WIDE / GAS / SHIELD) | ABILITY button (shows a cooldown ring) | Q |
+| Revive a body (Supreme Leader) | HOLD the USE button (it says REVIVE) for 3 s | hold E |
 | Look at the other floor's map | Tap the minimap | M |
 
 - **Stairs:** walk onto the yellow-striped stairs and press USE to go to the matching stairs on the other floor. You only see players on your own floor.
@@ -84,11 +86,27 @@ Everyone gets a secret character at the start of each round, shown on a 4-second
 Everyone else is a regular Hosteller. Killers all look exactly like everyone else.
 
 - **Killing:** killers press ATTACK to hit the closest player in front of them within their range, then wait out their cooldown (15 s). Killers can't hurt each other. Nobody can be killed in the first 5 seconds (spawn protection, shown as a blue bubble).
-- **Bodies** stay where they fell for the whole round.
+- **Bodies** stay where they fell for the whole round (unless the Supreme Leader revives them).
 - **Ghosts:** dead players float through walls, see everything, and are invisible to the living.
 - **Vision:** the living see 6 tiles around them; killers see half that. Walls and solid furniture block sight.
 - **Vents:** killers can jump into a grate and pop out of the paired one, maybe on the other floor (8 s cooldown).
 - **Winning:** crew wins when every killer is dead or has left, or when every living Hosteller has finished their tasks. Killers win when everyone else is dead, or killers are at least as many as everyone else alive.
+
+## Abilities
+
+| Character | ABILITY (Q) | Cooldown |
+| --- | --- | --- |
+| Arch-Semen | **Dash**: 0.4 s at 2.5x speed. A hit while dashing counts normally. | 12 s |
+| Kallu Koli | **Wide swing**: arms your next attack to hit everyone in a 180° arc in front of you. | 15 s |
+| Mota-dalla | **Poison gas**: a green cloud (1.5 tiles) at your feet for 4 s. Anyone (except killers) in it dies. | 20 s |
+| Laal Jhanda | none (his kill is the red-cloth strangle) | |
+| Supreme Leader | **Shield**: the nearest player within 2 tiles (or yourself) can't be killed for 5 s. Plus **revive**: hold USE on a body for 3 s to bring them back, once per round. Can't kill. | 30 s |
+
+**The Gujju Rapper** (computer-controlled, from 10 players) lives in room 303 and never leaves on his own. Open the "Knock on 303" task and he wakes up ("KAUN HAI BEY?!"). You get 2.5 seconds to run. Then he drops the beat: everyone within 4 tiles (killers too) is stunned for 3 seconds, and he finishes off the knocker with his butt-crush. Shielded and spawn-protected players are safe. 20 s between beats. He can't be killed and doesn't count for either side.
+
+Stunned players can't move or act, but can still be killed. Shielded players show a blue bubble that everyone can see.
+
+All numbers live in `shared/characters.json` (cooldowns, gas radius, stun radius/length, shield length) and `shared/constants.ts` (dash speed, wide-swing arc, Gujju's reaction time, ranges).
 
 ## Tasks
 
@@ -171,7 +189,7 @@ It prints server update rate (should stay ~20/s) and the worst gap between updat
 | `npm run build` | Build the client into `dist/client` |
 | `npm run typecheck` | TypeScript strict check of everything |
 | `npm run map` | Validate `layout.json` and print both floors as ASCII |
-| `npm run selftest` | With the server running: scripted round in its own room that checks tasks (wrong place, too fast, never opened), hiding, searching, vents, spawn protection, ghosts and speed limits |
+| `npm run selftest` | With the server running: scripted rounds (each in its own room) that check tasks (wrong place, too fast, never opened), hiding, searching, vents, spawn protection, ghosts, speed limits, and every ability incl. the Gujju Rapper and revive. `npm run selftest -- - gujju` runs one scenario (core, dash, wide, gas, gujju). |
 | `npm run tunnel` | Print tunnel fallback instructions |
 | `npm run sim -- [count] [seconds] [url]` | Headless bot load test |
 

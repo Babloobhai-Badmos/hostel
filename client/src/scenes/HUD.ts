@@ -5,6 +5,7 @@
 
 import Phaser from "phaser";
 import {
+  GUJJU_REACT_SECONDS,
   KILL_FEED_SECONDS,
   MAX_PLAYERS,
   ROLE_REVEAL_SECONDS,
@@ -68,8 +69,18 @@ function describeUse(t: UseTarget): { button: string; prompt: string } {
       return { button: "VENT", prompt: "Jump into the vent" };
     case "task":
       return { button: "TASK", prompt: t.station.name };
+    case "revive":
+      return { button: "REVIVE", prompt: "HOLD to revive this body" };
   }
 }
+
+/** ABILITY button caption per ability id. */
+const ABILITY_LABEL: Record<string, string> = {
+  dash: "DASH",
+  "wide-swing": "WIDE",
+  "poisonous-smell": "GAS",
+  shield: "SHIELD",
+};
 
 function roleTitle(c: CharacterDef | undefined, spectator: boolean): string {
   if (spectator) return "SPECTATOR (ghost)";
@@ -159,6 +170,14 @@ export class HUDScene extends Phaser.Scene {
       net.on("taskList", () => this.renderTaskList()),
       net.on("kill", (msg) => this.onKill(msg)),
       net.on("error", (text) => this.pushFeed(text)),
+      net.on("fx", (msg) => {
+        if (msg.kind !== "gujju-awake") return;
+        const me = (this.scene.get("Game") as GameScene | undefined)?.localState;
+        if (me && me.alive && me.floor === msg.floor && Math.hypot(me.x - msg.x, me.y - msg.y) < TILE_SIZE * 8) {
+          this.pushFeed(`The Gujju Rapper heard you knocking… RUN! (${GUJJU_REACT_SECONDS}s)`);
+          navigator.vibrate?.([80, 60, 80]);
+        }
+      }),
     ];
 
     this.renderTaskList();
@@ -298,8 +317,22 @@ export class HUDScene extends Phaser.Scene {
     this.touch?.setEnabled("attack", !!victim && attackCd <= 0);
     this.touch?.setCooldown("attack", attackCd);
 
+    // ABILITY: role-specific label, lit when ready.
+    const ability = c?.ability;
+    const abilityCd = ability ? (net.readyAt.ability - now) / ((c?.abilityCooldown ?? 1) * 1000) : 0;
+    this.touch?.setLabel("ability", ability ? ABILITY_LABEL[ability] ?? "ABILITY" : "ABILITY");
+    this.touch?.setEnabled("ability", game.abilityUsable());
+    this.touch?.setCooldown("ability", abilityCd);
+
     const keyboard = !this.touch?.visible;
     const prompts: string[] = [];
+    if (me.alive && room.state.players.get(net.sessionId)?.stunned) prompts.push("💫 STUNNED! 💫");
+    if (ability && keyboard && game.abilityUsable()) prompts.push(`[Q] ${ABILITY_LABEL[ability] ?? "ABILITY"}`);
+    if (ability === "wide-swing" && net.wideArmed) prompts.push("WIDE SWING ARMED: next hit gets everyone in front");
+    if (game.reviveStartedAt > 0) {
+      const hold = (c?.reviveHoldSeconds ?? 3) * 1000;
+      prompts.push(`Reviving… ${Math.min(100, Math.round(((now - game.reviveStartedAt) / hold) * 100))}%`);
+    }
     if (use) prompts.push(`${keyboard ? "[E] " : ""}${use.prompt}${useCooldown > 0 ? ` (${Math.ceil(useCooldown * (target?.kind === "vent" ? VENT_COOLDOWN_SECONDS : SEARCH_COOLDOWN_SECONDS))}s)` : ""}`);
     if (victim && keyboard) prompts.push(attackCd > 0 ? `Attack ready in ${Math.ceil(attackCd * (c?.attackCooldown ?? 0))}s` : "[Space] ATTACK");
     const protection = net.readyAt.protection - now;

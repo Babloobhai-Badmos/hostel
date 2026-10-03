@@ -20,6 +20,7 @@ const FINISHER_TEXT: Record<string, [string, string]> = {
   splat: ["SPLAT!", "#9be564"],
   strangle: ["GHHKK!", "#ff4d4d"],
   "butt-crush": ["SQUISH!", "#ff9ad5"],
+  gas: ["COUGH! COUGH!", "#9be564"],
 };
 
 function popText(scene: Phaser.Scene, x: number, y: number, text: string, color: string, size = 26): void {
@@ -104,6 +105,7 @@ export function killEffect(
 ): void {
   const [text, textColor] = FINISHER_TEXT[finisher] ?? FINISHER_TEXT.thwack;
   if (finisher === "strangle") redCloth(scene, x, y, angle);
+  if (finisher === "butt-crush") buttDrop(scene, x, y);
   starBurst(scene, x, y, 0xffffff);
   bloodSpray(scene, x, y, angle);
   popText(scene, x, y - 30, text, textColor);
@@ -127,6 +129,94 @@ export function killEffect(
       onLanded();
     },
   });
+}
+
+/** Gujju Rapper's finisher: a giant bare bum drops out of the sky onto the victim. */
+function buttDrop(scene: Phaser.Scene, x: number, y: number): void {
+  const g = scene.add.graphics().setDepth(EFFECT_DEPTH + 1);
+  g.fillStyle(0x000000, 1);
+  g.fillCircle(-11, 0, 14);
+  g.fillCircle(11, 0, 14);
+  g.fillStyle(0xd4a017, 1);
+  g.fillRect(-26, -26, 52, 16);
+  g.fillStyle(0xf2b48c, 1);
+  g.fillCircle(-11, 0, 12);
+  g.fillCircle(11, 0, 12);
+  g.lineStyle(2, 0xc98a66, 1);
+  g.lineBetween(0, -8, 0, 10);
+  g.setPosition(x, y - 120);
+  scene.tweens.add({
+    targets: g,
+    y,
+    duration: 260,
+    ease: "Quad.In",
+    onComplete: () => {
+      scene.tweens.add({ targets: g, scaleY: 0.6, scaleX: 1.25, duration: 90, yoyo: true, repeat: 2 });
+      scene.tweens.add({ targets: g, alpha: 0, delay: 700, duration: 300, onComplete: () => g.destroy() });
+    },
+  });
+}
+
+/** Dash: speed lines behind the dasher. */
+export function dashEffect(scene: Phaser.Scene, x: number, y: number, angle: number): void {
+  for (let i = 0; i < 4; i++) {
+    const off = (i - 1.5) * 7;
+    const len = 30 + Math.random() * 20;
+    const sx = x - Math.cos(angle) * 10 + Math.cos(angle + Math.PI / 2) * off;
+    const sy = y - Math.sin(angle) * 10 + Math.sin(angle + Math.PI / 2) * off;
+    const line = scene.add
+      .line(0, 0, sx, sy, sx - Math.cos(angle) * len, sy - Math.sin(angle) * len, 0xffffff, 0.8)
+      .setOrigin(0)
+      .setLineWidth(2)
+      .setDepth(EFFECT_DEPTH);
+    scene.tweens.add({ targets: line, alpha: 0, duration: 400, onComplete: () => line.destroy() });
+  }
+  popText(scene, x, y - 24, "ZOOM!", "#ffffff", 16);
+}
+
+/** Wide swing: a big half-moon swoosh in front of the swinger. */
+export function wideSwingEffect(scene: Phaser.Scene, x: number, y: number, angle: number, reachPx: number): void {
+  const g = scene.add.graphics().setDepth(EFFECT_DEPTH);
+  g.fillStyle(0xffffff, 0.35);
+  g.slice(x, y, reachPx, angle - Math.PI / 2, angle + Math.PI / 2, false);
+  g.fillPath();
+  g.lineStyle(4, 0xffffff, 0.9);
+  g.beginPath();
+  g.arc(x, y, reachPx, angle - Math.PI / 2, angle + Math.PI / 2, false);
+  g.strokePath();
+  scene.tweens.add({ targets: g, alpha: 0, duration: 450, onComplete: () => g.destroy() });
+  popText(scene, x, y - 34, "WHOOSH!", "#ffb347", 22);
+}
+
+export function shieldEffect(scene: Phaser.Scene, x: number, y: number): void {
+  const ring = scene.add.circle(x, y, PLAYER_RADIUS_PX, 0x7fdbff, 0.3).setStrokeStyle(3, 0x7fdbff).setDepth(EFFECT_DEPTH);
+  scene.tweens.add({ targets: ring, radius: PLAYER_RADIUS_PX * 3, alpha: 0, duration: 500, onComplete: () => ring.destroy() });
+  popText(scene, x, y - 26, "SHIELD!", "#7fdbff", 16);
+}
+
+/** Beat drop: shockwave rings and flying music notes. */
+export function beatEffect(scene: Phaser.Scene, x: number, y: number, radius: number): void {
+  for (let i = 0; i < 3; i++) {
+    const ring = scene.add.circle(x, y, 8, 0xff9ad5, 0).setStrokeStyle(4, 0xff9ad5, 0.9).setDepth(EFFECT_DEPTH);
+    scene.tweens.add({ targets: ring, radius, alpha: 0, delay: i * 180, duration: 600, onComplete: () => ring.destroy() });
+  }
+  for (let i = 0; i < 10; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const note = scene.add.text(x, y, Math.random() < 0.5 ? "♪" : "♫", { fontSize: "20px", color: "#ff9ad5" }).setOrigin(0.5).setDepth(EFFECT_DEPTH + 1);
+    scene.tweens.add({ targets: note, x: x + Math.cos(a) * radius * 0.8, y: y + Math.sin(a) * radius * 0.8, alpha: 0, duration: 900, onComplete: () => note.destroy() });
+  }
+  popText(scene, x, y - 40, "DROP THE BEAT!", "#ff9ad5", 24);
+}
+
+export function reviveEffect(scene: Phaser.Scene, x: number, y: number): void {
+  const halo = scene.add.ellipse(x, y - PLAYER_RADIUS_PX - 6, 26, 8, 0x000000, 0).setStrokeStyle(3, 0xffe066).setDepth(EFFECT_DEPTH);
+  scene.tweens.add({ targets: halo, y: halo.y - 20, alpha: 0, duration: 1200, onComplete: () => halo.destroy() });
+  starBurst(scene, x, y, 0xffe066);
+  popText(scene, x, y - 30, "REVIVED!", "#ffe066", 22);
+}
+
+export function gujjuAwakeEffect(scene: Phaser.Scene, x: number, y: number): void {
+  popText(scene, x, y - 46, "KAUN HAI BEY?!", "#ff4d4d", 20);
 }
 
 export function ventPopEffect(scene: Phaser.Scene, x: number, y: number): void {

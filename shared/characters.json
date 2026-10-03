@@ -10,7 +10,7 @@
     "ability": "dash",
     "abilityCooldown": 12,
     "finisher": "thwack",
-    "blurb": "Fast and sneaky. Dash in, THWACK, dash out."
+    "blurb": "Fast and sneaky. DASH in (Q / ABILITY), THWACK, dash out."
   },
   {
     "id": "kallu-koli",
@@ -23,7 +23,7 @@
     "ability": "wide-swing",
     "abilityCooldown": 15,
     "finisher": "bonk",
-    "blurb": "Slow, long reach. One big swing and they're flat."
+    "blurb": "Slow, long reach. WIDE SWING (Q / ABILITY): your next hit flattens everyone in front of you."
   },
   {
     "id": "mota-dalla",
@@ -38,7 +38,7 @@
     "gasRadius": 1.5,
     "gasSeconds": 4,
     "finisher": "splat",
-    "blurb": "Slowest in the hostel. His gas kills anyone who walks into it. Killers are immune."
+    "blurb": "Slowest in the hostel. GAS (Q / ABILITY): a poisonous cloud that kills anyone who walks into it. Killers are immune."
   },
   {
     "id": "laal-jhanda",
@@ -48,9 +48,8 @@
     "attackRange": 0.8,
     "attackCooldown": 15,
     "canVent": true,
-    "ability": "red-cloth",
     "finisher": "strangle",
-    "blurb": "Throws his red cloth around your neck and pulls tight."
+    "blurb": "Throws his red cloth around your neck and pulls tight. No tricks, just fast and close."
   },
   {
     "id": "gujju-rapper",
@@ -73,12 +72,12 @@
     "role": "savior",
     "speed": 1.0,
     "canVent": false,
-    "ability": "revive-once",
-    "shield": true,
+    "ability": "shield",
+    "abilityCooldown": 30,
+    "revive": true,
     "shieldSeconds": 5,
-    "shieldCooldown": 30,
     "reviveHoldSeconds": 3,
-    "blurb": "Can't kill. Can bring one body back to life per round, and shield people."
+    "blurb": "Can't kill. Hold USE on a body for 3 s to bring them back (once per round). SHIELD (Q / ABILITY) protects you or the nearest player for 5 s."
   },
   {
     "id": "regular",

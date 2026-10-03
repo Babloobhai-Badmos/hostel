@@ -15,8 +15,11 @@ export const ClientMsg = {
   TaskDone: "taskDone",
   /** Closed a minigame without finishing it. */
   TaskCancel: "taskCancel",
-  // Reserved for later phases:
+  /** Use your character's ability (Q / ABILITY button). */
   Ability: "ability",
+  /** Supreme Leader started / stopped holding USE on a body. */
+  ReviveStart: "reviveStart",
+  ReviveCancel: "reviveCancel",
 } as const;
 export type ClientMsg = (typeof ClientMsg)[keyof typeof ClientMsg];
 
@@ -41,6 +44,8 @@ export const ServerMsg = {
   TaskOpen: "taskOpen",
   /** Private: close the open minigame (you moved away, died, or the round ended). */
   TaskClose: "taskClose",
+  /** Broadcast: an ability effect to draw (dash, wide swing, shield, beat drop, revive, gas). */
+  Fx: "fx",
 } as const;
 export type ServerMsg = (typeof ServerMsg)[keyof typeof ServerMsg];
 
@@ -85,6 +90,11 @@ export interface CooldownMessage {
   attack: number;
   vent: number;
   search: number;
+  ability: number;
+  /** Kallu Koli: the next swing is a wide swing. */
+  wideArmed: boolean;
+  /** Supreme Leader: revive already used this round. */
+  reviveUsed: boolean;
   /** Milliseconds of spawn protection left. */
   protection: number;
 }
@@ -99,6 +109,19 @@ export interface KillMessage {
   angle: number;
   /** Which finishing move to animate (character's `finisher`). */
   finisher: string;
+}
+
+export type FxKind = "dash" | "wide" | "shield" | "beat" | "revive" | "gas" | "gujju-awake";
+
+export interface FxMessage {
+  kind: FxKind;
+  floor: number;
+  x: number;
+  y: number;
+  /** Facing (dash, wide swing), radians. */
+  angle?: number;
+  /** Radius in pixels (beat, gas). */
+  radius?: number;
 }
 
 export interface VentPopMessage {

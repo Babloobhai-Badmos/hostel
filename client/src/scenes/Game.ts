@@ -19,6 +19,7 @@ import Phaser from "phaser";
 import {
   ATTACK_REACH_TOLERANCE_TILES,
   BASE_SPEED_PX_PER_SEC,
+  DASH_SPEED_MULTIPLIER,
   FOG_ALPHA,
   GHOST_SPEED_MULTIPLIER,
   INPUT_SEND_MS,
@@ -45,9 +46,21 @@ import type { Body, Player } from "../../../server/schema/GameState";
 import { KeyboardControls } from "../input/keyboard";
 import { InterpolationBuffer } from "../render/interpolation";
 import { createFloorView } from "../render/mapRenderer";
-import { createCorpseView, createPlayerView } from "../render/placeholderSprites";
+import { createCorpseView, createGujjuView, createPlayerView } from "../render/placeholderSprites";
 import type { PlayerView } from "../render/placeholderSprites";
-import { killEffect, searchEffect, ventPopEffect } from "../render/effects";
+import {
+  beatEffect,
+  dashEffect,
+  gujjuAwakeEffect,
+  killEffect,
+  reviveEffect,
+  searchEffect,
+  shieldEffect,
+  ventPopEffect,
+  wideSwingEffect,
+} from "../render/effects";
+import type { FxMessage } from "../../../shared/types";
+import type { Gas, Npc } from "../../../server/schema/GameState";
 import { net } from "../net";
 import type { HUDScene } from "./HUD";
 import { MinigameScene } from "./Minigame";
@@ -64,8 +77,16 @@ const FOG_DEPTH = 1_000_000;
 const FOG_MARGIN_PX = 200;
 /** A body that appears within this long of its kill message waits for the ragdoll to land. */
 const BODY_REVEAL_WAIT_MS = 1500;
-/** Spawn-protection bubble. */
-const SAFE_RING_COLOR = 0x7fdbff;
+/** Mota-dalla's gas cloud. */
+const GAS_COLOR = 0x7cb342;
+const GAS_ALPHA = 0.45;
+/** Gujju Rapper's speech bubble per mood. */
+const GUJJU_SPEECH: Record<string, string> = {
+  idle: "zzz… 🎧",
+  awake: "KAUN HAI BEY?!",
+  hunting: "🍑 AAVI JA!",
+  returning: "hmph 🎤",
+};
 /** Glow on your own unfinished task stations. */
 const TASK_GLOW_COLOR = 0xffe066;
 const TASK_GLOW_PULSE_MS = 800;
@@ -93,7 +114,10 @@ export class GameScene extends Phaser.Scene {
   /** victimId -> time of the kill message, so their body waits for the ragdoll. */
   private recentKills = new Map<string, number>();
   private localView: PlayerView | null = null;
-  private safeRing!: Phaser.GameObjects.Arc;
+  private npcs = new Map<string, { view: ReturnType<typeof createGujjuView>; buffer: InterpolationBuffer; npc: Npc; pos: Vec2 }>();
+  private gasClouds = new Map<string, { obj: Phaser.GameObjects.Container; gas: Gas }>();
+  /** Revive hold in progress (Supreme Leader): when it started, or 0. */
+  reviveStartedAt = 0;
   private fog!: Phaser.GameObjects.Graphics;
   /** taskId -> pulsing glow at its station (shown only for your own unfinished tasks on this floor). */
   private taskGlows = new Map<string, Phaser.GameObjects.Arc>();
@@ -137,7 +161,9 @@ export class GameScene extends Phaser.Scene {
     }
     this.showFloor(hostelMap.spawnFloor);
     this.keyboard = new KeyboardControls(this);
-    this.safeRing = this.add.circle(0, 0, PLAYER_RADIUS_PX + 6, SAFE_RING_COLOR, 0.15).setStrokeStyle(2, SAFE_RING_COLOR, 0.8).setVisible(false);
+    this.npcs.clear();
+    this.gasClouds.clear();
+    this.reviveStartedAt = 0;
     this.fog = this.add.graphics().setDepth(FOG_DEPTH);
     this.taskGlows.clear();
     for (const station of hostelMap.tasks.values()) {
@@ -158,6 +184,7 @@ export class GameScene extends Phaser.Scene {
       net.on("kill", (msg) => this.onKill(msg)),
       net.on("ventPop", (msg) => msg.floor === this.currentFloor && ventPopEffect(this, msg.x, msg.y)),
       net.on("search", (msg) => msg.floor === this.currentFloor && searchEffect(this, msg.x, msg.y, msg.found)),
+      net.on("fx", (msg) => this.onFx(msg)),
       net.on("taskOpen", (msg) => {
         if (!MinigameScene.isOpen(this)) this.scene.launch("Minigame", msg);
       }),
@@ -200,7 +227,15 @@ export class GameScene extends Phaser.Scene {
       isKiller: this.playing && c?.role === "killer",
       canVent: this.playing && !!c?.canVent,
       openTasks: this.playing ? net.openTaskIds : [],
+      revivable: this.revivableBodies(),
     });
+  }
+
+  /** Supreme Leader with a revive left: every body (useTarget picks the one in reach). */
+  private revivableBodies(): { id: string; floor: number; x: number; y: number }[] {
+    const room = net.room;
+    if (!room || !this.playing || !net.character?.revive || net.reviveUsed || !this.me?.alive) return [];
+    return [...room.state.bodies.values()].map((b) => ({ id: b.id, floor: b.floor, x: b.x, y: b.y }));
   }
 
   /** The player a swing would hit right now, if any (killers only). */
@@ -265,6 +300,37 @@ export class GameScene extends Phaser.Scene {
       $(room.state).bodies.onRemove((_body, id) => {
         this.bodies.get(id)?.container.destroy();
         this.bodies.delete(id);
+      }),
+      $(room.state).npcs.onAdd((npc, id) => {
+        this.npcs.get(id)?.view.container.destroy();
+        const view = createGujjuView(this, npc.name);
+        const buffer = new InterpolationBuffer();
+        buffer.reset(npc.x, npc.y);
+        view.container.setPosition(npc.x, npc.y).setVisible(false);
+        const entry = { view, buffer, npc, pos: { x: npc.x, y: npc.y } };
+        this.npcs.set(id, entry);
+        this.cleanups.push($(npc).onChange(() => buffer.push(npc.x, npc.y)));
+      }),
+      $(room.state).npcs.onRemove((_npc, id) => {
+        this.npcs.get(id)?.view.container.destroy();
+        this.npcs.delete(id);
+      }),
+      $(room.state).gas.onAdd((gas, id) => {
+        const puffs = [0, 1, 2, 3, 4, 5].map((i) => {
+          const a = (i / 6) * Math.PI * 2;
+          return this.add.circle(Math.cos(a) * gas.radius * 0.45, Math.sin(a) * gas.radius * 0.45, gas.radius * 0.6, GAS_COLOR, GAS_ALPHA * 0.6);
+        });
+        const core = this.add.circle(0, 0, gas.radius, GAS_COLOR, GAS_ALPHA);
+        const obj = this.add.container(gas.x, gas.y, [core, ...puffs]).setDepth(gas.y + TILE_SIZE);
+        this.tweens.add({ targets: puffs, scale: 1.2, alpha: GAS_ALPHA * 0.3, duration: 500, yoyo: true, repeat: -1 });
+        this.tweens.add({ targets: obj, angle: 360, duration: 6000, repeat: -1 });
+        this.gasClouds.set(id, { obj, gas });
+      }),
+      $(room.state).gas.onRemove((_gas, id) => {
+        const g = this.gasClouds.get(id);
+        if (!g) return;
+        this.tweens.add({ targets: g.obj, alpha: 0, scale: 1.3, duration: 300, onComplete: () => g.obj.destroy() });
+        this.gasClouds.delete(id);
       }),
     );
   }
@@ -357,6 +423,7 @@ export class GameScene extends Phaser.Scene {
     else if (isLocal && !player.alive) tag = " (ghost)";
     else if (isLocal && player.hidden) tag = " (hiding)";
     else if (isLocal && player.venting) tag = " (in vent)";
+    else if (isLocal && player.stunned) tag = " (stunned)";
     view.label.setText(player.name + tag);
     view.body.setTint(PLAYER_COLORS[player.color]);
   }
@@ -374,12 +441,41 @@ export class GameScene extends Phaser.Scene {
   private canMove(p: Player): boolean {
     const phase = net.room?.state.phase;
     if (phase === GamePhase.Reveal || phase === GamePhase.Ended) return false;
-    return !p.alive || (!p.hidden && !p.venting);
+    return !p.alive || (!p.hidden && !p.venting && !p.stunned);
   }
 
   private speedMultiplier(p: Player): number {
     if (!p.alive) return GHOST_SPEED_MULTIPLIER;
-    return net.character?.speed ?? 1;
+    return (net.character?.speed ?? 1) * (p.dashing ? DASH_SPEED_MULTIPLIER : 1);
+  }
+
+  private onFx(msg: FxMessage): void {
+    if (msg.floor !== this.currentFloor) return;
+    switch (msg.kind) {
+      case "dash":
+        dashEffect(this, msg.x, msg.y, msg.angle ?? 0);
+        break;
+      case "wide": {
+        const reach = attackReachPx(net.character?.attackRange ?? 1.5);
+        wideSwingEffect(this, msg.x, msg.y, msg.angle ?? 0, reach);
+        break;
+      }
+      case "shield":
+        shieldEffect(this, msg.x, msg.y);
+        break;
+      case "beat":
+        beatEffect(this, msg.x, msg.y, msg.radius ?? TILE_SIZE * 4);
+        if (this.me?.stunned) this.cameras.main.shake(300, 0.012);
+        break;
+      case "revive":
+        reviveEffect(this, msg.x, msg.y);
+        break;
+      case "gujju-awake":
+        gujjuAwakeEffect(this, msg.x, msg.y);
+        break;
+      case "gas":
+        break; // the cloud itself is drawn from the synced state
+    }
   }
 
   private applyInput(pos: Vec2, input: InputMessage, p: Player): Vec2 {
@@ -403,10 +499,34 @@ export class GameScene extends Phaser.Scene {
   private handleButtons(): void {
     if (MinigameScene.isOpen(this)) return;
     const touch = this.hud()?.touch;
+    const target = this.currentUseTarget();
     const usePressed = Phaser.Input.Keyboard.JustDown(this.keyboard.use) || (touch?.consumePress("use") ?? false);
-    if (usePressed && this.currentUseTarget()) net.room?.send(ClientMsg.Use);
+    const useHeld = this.keyboard.use.isDown || (touch?.isHeld("use") ?? false);
+
+    // Reviving is hold-to-use: start on press, cancel on release or when the body is out of reach.
+    if (target?.kind === "revive") {
+      if (useHeld && this.reviveStartedAt === 0) {
+        this.reviveStartedAt = performance.now();
+        net.room?.send(ClientMsg.ReviveStart);
+      }
+    }
+    if (this.reviveStartedAt !== 0 && (!useHeld || target?.kind !== "revive")) {
+      this.reviveStartedAt = 0;
+      net.room?.send(ClientMsg.ReviveCancel);
+    }
+    if (usePressed && target && target.kind !== "revive") net.room?.send(ClientMsg.Use);
+
+    const abilityPressed = Phaser.Input.Keyboard.JustDown(this.keyboard.ability) || (touch?.consumePress("ability") ?? false);
+    if (abilityPressed && this.abilityUsable()) net.room?.send(ClientMsg.Ability);
     const attackPressed = Phaser.Input.Keyboard.JustDown(this.keyboard.attack) || (touch?.consumePress("attack") ?? false);
     if (attackPressed && performance.now() >= net.readyAt.attack && this.attackTarget()) net.room?.send(ClientMsg.Attack);
+  }
+
+  /** Can the local player use their ABILITY right now? */
+  abilityUsable(): boolean {
+    const me = this.me;
+    const c = net.character;
+    return !!(c?.ability && me && me.alive && this.playing && !me.hidden && !me.venting && !me.stunned && performance.now() >= net.readyAt.ability);
   }
 
   // ---------- Frame ----------
@@ -452,7 +572,10 @@ export class GameScene extends Phaser.Scene {
         .setDepth(this.display.y)
         .setAlpha(!me.alive ? GHOST_ALPHA : me.hidden || me.venting ? HIDDEN_SELF_ALPHA : 1);
     }
-    this.safeRing.setVisible(me.alive && me.safe).setPosition(this.display.x, this.display.y);
+    if (this.localView) {
+      this.localView.bubble.setVisible(me.alive && me.safe);
+      this.localView.stars.setVisible(me.alive && me.stunned);
+    }
 
     this.updateVisibility(now);
   }
@@ -492,6 +615,8 @@ export class GameScene extends Phaser.Scene {
         if (sample) r.pos = sample;
         r.view.container.setPosition(r.pos.x, r.pos.y).setDepth(r.pos.y);
         r.view.container.setAlpha(!p.connected ? OFFLINE_ALPHA : p.alive ? 1 : GHOST_ALPHA);
+        r.view.bubble.setVisible(p.alive && p.safe);
+        r.view.stars.setVisible(p.alive && p.stunned);
       } else {
         // Keep the position fresh so attack checks and re-appearing are accurate.
         const sample = r.buffer.sample(now);
@@ -509,6 +634,16 @@ export class GameScene extends Phaser.Scene {
     this.bodies.forEach((b) => {
       b.container.setVisible(b.landed && b.body.floor === this.currentFloor && canSee(b.body.x, b.body.y, TILE_SIZE));
     });
+
+    this.npcs.forEach((n) => {
+      const sample = n.buffer.sample(now);
+      if (sample) n.pos = sample;
+      const show = n.npc.floor === this.currentFloor && canSee(n.pos.x, n.pos.y);
+      n.view.container.setVisible(show).setPosition(n.pos.x, n.pos.y).setDepth(n.pos.y);
+      n.view.speech.setText(GUJJU_SPEECH[n.npc.mood] ?? "");
+    });
+
+    this.gasClouds.forEach((g) => g.obj.setVisible(g.gas.floor === this.currentFloor));
 
     this.drawFog(radius, grid);
   }

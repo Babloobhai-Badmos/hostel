@@ -29,6 +29,33 @@ function angleDiff(a: number, b: number): number {
 }
 
 /**
+ * Everyone a swing would hit: all candidates inside the arc, within reach,
+ * in line of sight. Used for Kallu Koli's wide swing.
+ */
+export function pickAllAttackTargets<T extends Combatant>(
+  grid: CollisionGrid,
+  attacker: Combatant,
+  facing: number,
+  reachPx: number,
+  candidates: Iterable<T>,
+  arcDeg: number,
+): T[] {
+  const halfArc = ((arcDeg / 2) * Math.PI) / 180;
+  const out: T[] = [];
+  for (const c of candidates) {
+    if (c.id === attacker.id || c.floor !== attacker.floor) continue;
+    const dx = c.x - attacker.x;
+    const dy = c.y - attacker.y;
+    const d = dx * dx + dy * dy;
+    if (d > reachPx * reachPx) continue;
+    if (d > PLAYER_RADIUS_PX ** 2 && angleDiff(Math.atan2(dy, dx), facing) > halfArc) continue;
+    if (!hasLineOfSight(grid, attacker.x, attacker.y, c.x, c.y)) continue;
+    out.push(c);
+  }
+  return out;
+}
+
+/**
  * The closest candidate in front of the attacker (within the arc), within
  * reach and with no wall in between. `candidates` must already be filtered to
  * valid victims (alive, not a killer, not protected, not hidden).

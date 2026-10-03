@@ -5,6 +5,7 @@ import { RECONNECT_SECONDS, ROOM_NAME } from "../../shared/constants";
 import { ClientMsg, ServerMsg } from "../../shared/types";
 import type {
   CooldownMessage,
+  FxMessage,
   JoinOptions,
   KillMessage,
   ResultsMessage,
@@ -43,6 +44,7 @@ export interface NetEvents {
   taskOpen: TaskOpenMessage;
   taskClose: null;
   taskList: TaskListMessage;
+  fx: FxMessage;
 }
 type EventHandler<K extends keyof NetEvents> = (msg: NetEvents[K]) => void;
 
@@ -65,7 +67,11 @@ class Net {
   /** My character this round (null in the lobby / before the server tells us). */
   role: RoleMessage | null = null;
   /** performance.now() timestamps when each action is ready again. */
-  readyAt = { attack: 0, vent: 0, search: 0, protection: 0 };
+  readyAt = { attack: 0, vent: 0, search: 0, ability: 0, protection: 0 };
+  /** Kallu Koli: next swing is wide. */
+  wideArmed = false;
+  /** Supreme Leader: revive used this round. */
+  reviveUsed = false;
   results: ResultsMessage | null = null;
   /** My task list this round (killers: a fake one). */
   tasks: TaskListMessage = { tasks: [], fake: false };
@@ -157,8 +163,11 @@ class Net {
         attack: now + msg.attack,
         vent: now + msg.vent,
         search: now + msg.search,
+        ability: now + msg.ability,
         protection: now + msg.protection,
       };
+      this.wideArmed = msg.wideArmed;
+      this.reviveUsed = msg.reviveUsed;
     });
     room.onMessage(ServerMsg.Kill, (msg: KillMessage) => this.emit("kill", msg));
     room.onMessage(ServerMsg.VentPop, (msg: VentPopMessage) => this.emit("ventPop", msg));
@@ -174,6 +183,7 @@ class Net {
     });
     room.onMessage(ServerMsg.TaskOpen, (msg: TaskOpenMessage) => this.emit("taskOpen", msg));
     room.onMessage(ServerMsg.TaskClose, () => this.emit("taskClose", null));
+    room.onMessage(ServerMsg.Fx, (msg: FxMessage) => this.emit("fx", msg));
     // Back in the lobby: forget last round's role and results.
     getStateCallbacks(room)(room.state).listen("phase", (phase) => {
       if (phase === "lobby") {

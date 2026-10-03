@@ -96,6 +96,25 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
   g.destroy();
 }
 
+/** The Gujju Rapper: gold blob with a mic and a speech bubble. Everyone knows who he is. */
+export function createGujjuView(scene: Phaser.Scene, name: string): PlayerView & { speech: Phaser.GameObjects.Text } {
+  const view = createPlayerView(scene, `🎤 ${name}`, 0xd4a017, false);
+  view.label.setColor("#ffd54f");
+  const speech = scene.add
+    .text(0, -PLAYER_RADIUS_PX - LABEL_GAP_PX - LABEL_FONT_PX - 4, "", {
+      fontFamily: "system-ui, sans-serif",
+      fontSize: `${LABEL_FONT_PX}px`,
+      fontStyle: "bold",
+      color: "#000000",
+      backgroundColor: "#ffffff",
+      padding: { x: 4, y: 2 },
+    })
+    .setOrigin(0.5, 1)
+    .setResolution(2);
+  view.container.add(speech);
+  return { ...view, speech };
+}
+
 /** A body on the floor: blood pool, flattened tinted body, X-eyes and bare bum. */
 export function createCorpseView(scene: Phaser.Scene, color: number): Phaser.GameObjects.Container {
   const blood = scene.add.image(0, 2, TEX_BLOOD).setAngle(Phaser.Math.Between(0, 359));
@@ -108,7 +127,13 @@ export interface PlayerView {
   container: Phaser.GameObjects.Container;
   body: Phaser.GameObjects.Image;
   label: Phaser.GameObjects.Text;
+  /** Shield / spawn-protection bubble. */
+  bubble: Phaser.GameObjects.Arc;
+  /** Spinning stars while stunned. */
+  stars: Phaser.GameObjects.Text;
 }
+
+const BUBBLE_COLOR = 0x7fdbff;
 
 /** Name label font size in world pixels. */
 const LABEL_FONT_PX = 12;
@@ -134,6 +159,15 @@ export function createPlayerView(
     })
     .setOrigin(0.5, 1)
     .setResolution(Math.max(2, window.devicePixelRatio * 2));
-  const container = scene.add.container(0, 0, [shadow, body, label]);
-  return { container, body, label };
+  const bubble = scene.add
+    .circle(0, 0, PLAYER_RADIUS_PX + 6, BUBBLE_COLOR, 0.15)
+    .setStrokeStyle(2, BUBBLE_COLOR, 0.85)
+    .setVisible(false);
+  const stars = scene.add
+    .text(0, -PLAYER_RADIUS_PX - LABEL_GAP_PX - LABEL_FONT_PX - 2, "💫 💫", { fontSize: `${LABEL_FONT_PX}px` })
+    .setOrigin(0.5, 1)
+    .setVisible(false);
+  scene.tweens.add({ targets: stars, angle: 360, duration: 900, repeat: -1 });
+  const container = scene.add.container(0, 0, [shadow, bubble, body, label, stars]);
+  return { container, body, label, bubble, stars };
 }

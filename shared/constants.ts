@@ -87,6 +87,22 @@ export const ATTACK_REACH_TOLERANCE_TILES = 0.35;
 /** Killers can search one hiding spot this often. A hider found inside is killed. */
 export const SEARCH_COOLDOWN_SECONDS = 10;
 
+// ---------- Abilities ----------
+/** Arch-Semen's dash: how long it lasts and how much faster. */
+export const DASH_SECONDS = 0.4;
+export const DASH_SPEED_MULTIPLIER = 2.5;
+/** Kallu Koli's wide swing: arc of the armed attack. It stays armed this long if unused. */
+export const WIDE_SWING_ARC_DEG = 180;
+export const WIDE_SWING_ARMED_SECONDS = 10;
+/** Supreme Leader's shield goes on the closest living player within this range, or on themselves. */
+export const SHIELD_RANGE_TILES = 2;
+/** Supreme Leader must stand this close to a body to revive it. */
+export const REVIVE_RANGE_TILES = 1.5;
+/** Gujju Rapper: seconds between hearing a knock and dropping the beat (time to run!). */
+export const GUJJU_REACT_SECONDS = 2.5;
+/** Gujju Rapper reaches this close (edge to edge) to finish someone. */
+export const GUJJU_KILL_RANGE_TILES = 0.5;
+
 // ---------- Vents (killers only) ----------
 export const VENT_RANGE_TILES = 1.1;
 /** Time spent "inside the pipes" between the two grates. */

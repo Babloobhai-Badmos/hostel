@@ -1,11 +1,12 @@
 // What the USE button would do right now. The client calls this to label and
 // enable the button; the server calls the same code to validate the request.
 //
-// Priority: climb out > stairs > vent (killers) > your task station > hiding spot.
+// Priority: climb out > stairs > vent (killers) > body (Supreme Leader, revive)
+// > your task station > hiding spot.
 // Near a hiding spot, crew HIDE and killers SEARCH. Ghosts can use stairs and
 // do their tasks (which no longer count).
 
-import { HIDE_RANGE_TILES, TASK_RANGE_TILES, TILE_SIZE, VENT_RANGE_TILES } from "./constants";
+import { HIDE_RANGE_TILES, REVIVE_RANGE_TILES, TASK_RANGE_TILES, TILE_SIZE, VENT_RANGE_TILES } from "./constants";
 import type { FloorMap, HideSpot, HostelMap, Stair, TaskStation, Vent } from "./buildMap";
 
 export type UseTarget =
@@ -14,7 +15,15 @@ export type UseTarget =
   | { kind: "vent"; vent: Vent }
   | { kind: "hide"; spot: HideSpot }
   | { kind: "search"; spot: HideSpot }
-  | { kind: "task"; station: TaskStation };
+  | { kind: "task"; station: TaskStation }
+  | { kind: "revive"; body: BodyRef };
+
+export interface BodyRef {
+  id: string;
+  floor: number;
+  x: number;
+  y: number;
+}
 
 export interface Actor {
   floor: number;
@@ -26,6 +35,8 @@ export interface Actor {
   canVent: boolean;
   /** Ids of this player's unfinished tasks. */
   openTasks: readonly string[];
+  /** Supreme Leader with a revive left: the bodies they could revive. Empty otherwise. */
+  revivable: readonly BodyRef[];
 }
 
 /** The stairs whose zone contains this point, if any. */
@@ -74,6 +85,10 @@ export function useTarget(map: HostelMap, actor: Actor): UseTarget | null {
   if (actor.alive && actor.canVent) {
     const vent = ventNear(floor, actor.x, actor.y);
     if (vent) return { kind: "vent", vent };
+  }
+  if (actor.alive && actor.revivable.length > 0) {
+    const body = nearest(actor.revivable.filter((b) => b.floor === actor.floor), actor.x, actor.y, REVIVE_RANGE_TILES);
+    if (body) return { kind: "revive", body };
   }
   const station = taskStationNear(floor, actor.x, actor.y, actor.openTasks);
   if (station) return { kind: "task", station };

@@ -23,7 +23,16 @@ export interface CharacterDef {
   home?: string;
   finisher?: string;
   blurb?: string;
-  [extra: string]: unknown;
+  /** Mota-dalla's gas. */
+  gasRadius?: number;
+  gasSeconds?: number;
+  /** Gujju Rapper's beat-stun. */
+  stunRadius?: number;
+  stunSeconds?: number;
+  /** Supreme Leader: shield length, and whether they can revive (once per round). */
+  shieldSeconds?: number;
+  revive?: boolean;
+  reviveHoldSeconds?: number;
 }
 
 export const CHARACTERS: CharacterDef[] = data as CharacterDef[];
