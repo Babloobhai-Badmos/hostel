@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen" />
+    <meta name="theme-color" content="#14121c" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Hostel</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #14121c;
+        color: #f4f0e6;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        /* No scrolling, zooming, pull-to-refresh or text selection anywhere. */
+        touch-action: none;
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        position: fixed;
+        inset: 0;
+      }
+      #game {
+        position: absolute;
+        inset: 0;
+      }
+      #game canvas {
+        display: block;
+      }
+
+      /* ---------- Lobby overlay (plain HTML so the phone keyboard works) ---------- */
+      #lobby {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at 30% 20%, #3a2350, #14121c 70%);
+        z-index: 10;
+      }
+      #lobby.show {
+        display: flex;
+      }
+      .card {
+        width: min(92vw, 560px);
+        max-height: 92vh;
+        overflow: auto;
+        box-sizing: border-box;
+        padding: 18px 22px;
+        background: #221d2e;
+        border: 3px solid #f4c430;
+        border-radius: 18px;
+        box-shadow: 0 8px 0 #0008;
+        touch-action: pan-y;
+      }
+      .card h1 {
+        margin: 0 0 4px;
+        font-size: 30px;
+        letter-spacing: 2px;
+        color: #f4c430;
+        transform: rotate(-2deg);
+      }
+      .card p.tag {
+        margin: 0 0 14px;
+        opacity: 0.75;
+        font-size: 14px;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+      }
+      .card input {
+        flex: 1;
+        min-width: 0;
+        font-size: 18px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 2px solid #5a4d70;
+        background: #14121c;
+        color: inherit;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      .card button {
+        font-size: 18px;
+        font-weight: 800;
+        padding: 12px 20px;
+        border-radius: 12px;
+        border: none;
+        background: #f4c430;
+        color: #14121c;
+        box-shadow: 0 4px 0 #9a7a10;
+        cursor: pointer;
+      }
+      .card button:disabled {
+        background: #5a4d70;
+        color: #a99cbd;
+        box-shadow: none;
+        cursor: default;
+      }
+      #start-btn {
+        width: 100%;
+        margin-top: 14px;
+        font-size: 22px;
+      }
+      #player-list {
+        list-style: none;
+        margin: 10px 0 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 6px;
+      }
+      #player-list li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        background: #14121c;
+        border-radius: 10px;
+        font-size: 15px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #player-list li.offline {
+        opacity: 0.45;
+      }
+      .dot {
+        flex: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid #000;
+      }
+      #lobby-status {
+        margin-top: 10px;
+        min-height: 20px;
+        font-size: 14px;
+        opacity: 0.85;
+      }
+      #lobby-error {
+        color: #ff6b6b;
+        font-size: 14px;
+        min-height: 18px;
+        margin-top: 6px;
+      }
+      .hidden {
+        display: none !important;
+      }
+
+      /* ---------- Rotate prompt for phones held in portrait ---------- */
+      #rotate {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #14121c;
+        font-size: 20px;
+        text-align: center;
+        padding: 24px;
+      }
+      #rotate .phone {
+        width: 46px;
+        height: 80px;
+        border: 4px solid #f4c430;
+        border-radius: 10px;
+        animation: tilt 1.6s ease-in-out infinite;
+      }
+      @keyframes tilt {
+        0%,
+        30% {
+          transform: rotate(0);
+        }
+        60%,
+        100% {
+          transform: rotate(-90deg);
+        }
+      }
+      @media (orientation: portrait) and (pointer: coarse) {
+        #rotate {
+          display: flex;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+
+    <div id="lobby">
+      <div class="card">
+        <h1>HOSTEL</h1>
+        <p class="tag">Someone in this hostel is not doing their tasks.</p>
+
+        <div id="join-form">
+          <div class="row">
+            <input id="name-input" maxlength="16" placeholder="Your name" autocomplete="off" enterkeyhint="go" />
+            <button id="join-btn">Join</button>
+          </div>
+        </div>
+
+        <div id="room-view" class="hidden">
+          <div id="lobby-status"></div>
+          <ul id="player-list"></ul>
+          <button id="start-btn" class="hidden">START</button>
+        </div>
+
+        <div id="lobby-error"></div>
+      </div>
+    </div>
+
+    <div id="rotate">
+      <div class="phone"></div>
+      Turn your phone sideways
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

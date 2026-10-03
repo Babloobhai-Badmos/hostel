@@ -1,0 +1,9 @@
+{
+  "name": "Hostel",
+  "short_name": "Hostel",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#14121c",
+  "theme_color": "#14121c"
+}
