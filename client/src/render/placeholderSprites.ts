@@ -1,9 +1,20 @@
-// Gray-box art generated at runtime, so no image files are needed.
-// Every player uses the SAME body texture tinted with their colour: a killer
-// is drawn exactly like everyone else.
+// Character views. With the sprite sheets in client/public/sprites/ loaded,
+// players are animated chibi students (see characterSprites.ts); otherwise
+// they fall back to the gray-box blobs generated here at runtime.
+// Every player uses the SAME art tinted with their colour: a killer is drawn
+// exactly like everyone else.
 
 import Phaser from "phaser";
 import { PLAYER_RADIUS_PX } from "../../../shared/constants";
+import {
+  CharacterRig,
+  characterMetrics,
+  createDeadLayers,
+  createNpcRig,
+  createPlayerRig,
+  hasNpcSprite,
+  hasPlayerSprites,
+} from "./characterSprites";
 
 export const TEX_BODY = "body";
 export const TEX_SHADOW = "shadow";
@@ -98,10 +109,10 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
 
 /** The Gujju Rapper: gold blob with a mic and a speech bubble. Everyone knows who he is. */
 export function createGujjuView(scene: Phaser.Scene, name: string): PlayerView & { speech: Phaser.GameObjects.Text } {
-  const view = createPlayerView(scene, `🎤 ${name}`, 0xd4a017, false);
+  const view = createPlayerView(scene, `🎤 ${name}`, 0xd4a017, false, "gujju");
   view.label.setColor("#ffd54f");
   const speech = scene.add
-    .text(0, -PLAYER_RADIUS_PX - LABEL_GAP_PX - LABEL_FONT_PX - 4, "", {
+    .text(0, view.label.y - LABEL_FONT_PX - 4, "", {
       fontFamily: "system-ui, sans-serif",
       fontSize: `${LABEL_FONT_PX}px`,
       fontStyle: "bold",
@@ -115,21 +126,26 @@ export function createGujjuView(scene: Phaser.Scene, name: string): PlayerView &
   return { ...view, speech };
 }
 
-/** The warden: a navy blob with a cap and a whistle. */
+/** The warden: navy uniform, cap, whistle. */
 export function createWardenView(scene: Phaser.Scene): PlayerView {
-  const view = createPlayerView(scene, "👮 WARDEN", 0x1f3a93, false);
+  const view = createPlayerView(scene, "👮 WARDEN", 0x1f3a93, false, "warden");
   view.label.setColor("#7fdbff");
-  const cap = scene.add.graphics();
-  cap.fillStyle(0x0b1a4a, 1);
-  cap.fillRect(-PLAYER_RADIUS_PX * 0.8, -PLAYER_RADIUS_PX - 2, PLAYER_RADIUS_PX * 1.6, 6);
-  cap.fillRect(-PLAYER_RADIUS_PX * 0.2, -PLAYER_RADIUS_PX - 2, PLAYER_RADIUS_PX * 1.2, 3);
-  view.container.addAt(cap, 3);
+  if (!view.rig) {
+    const cap = scene.add.graphics();
+    cap.fillStyle(0x0b1a4a, 1);
+    cap.fillRect(-PLAYER_RADIUS_PX * 0.8, -PLAYER_RADIUS_PX - 2, PLAYER_RADIUS_PX * 1.6, 6);
+    cap.fillRect(-PLAYER_RADIUS_PX * 0.2, -PLAYER_RADIUS_PX - 2, PLAYER_RADIUS_PX * 1.2, 3);
+    view.container.addAt(cap, 3);
+  }
   return view;
 }
 
-/** A body on the floor: blood pool, flattened tinted body, X-eyes and bare bum. */
+/** A body on the floor: blood pool, the body lying face-down with X-eyes and its bare bum up. */
 export function createCorpseView(scene: Phaser.Scene, color: number): Phaser.GameObjects.Container {
   const blood = scene.add.image(0, 2, TEX_BLOOD).setAngle(Phaser.Math.Between(0, 359));
+  if (hasPlayerSprites(scene)) {
+    return scene.add.container(0, 0, [blood.setScale(1.4), ...createDeadLayers(scene, color)]);
+  }
   const flat = scene.add.image(0, 0, TEX_CORPSE).setTint(color);
   const detail = scene.add.image(0, -PLAYER_RADIUS_PX * 0.45, TEX_CORPSE_DETAIL);
   return scene.add.container(0, 0, [blood, flat, detail]);
@@ -137,7 +153,10 @@ export function createCorpseView(scene: Phaser.Scene, color: number): Phaser.Gam
 
 export interface PlayerView {
   container: Phaser.GameObjects.Container;
+  /** The coloured part (blob, or the shirt layer of the sprite). */
   body: Phaser.GameObjects.Image;
+  /** Animated sprite (null when falling back to blobs). Call rig.update() every frame. */
+  rig: CharacterRig | null;
   label: Phaser.GameObjects.Text;
   /** Shield / spawn-protection bubble. */
   bubble: Phaser.GameObjects.Arc;
@@ -157,11 +176,16 @@ export function createPlayerView(
   name: string,
   color: number,
   isLocal: boolean,
+  npcKind?: string,
 ): PlayerView {
-  const shadow = scene.add.image(0, PLAYER_RADIUS_PX * 0.9, TEX_SHADOW);
-  const body = scene.add.image(0, 0, TEX_BODY).setTint(color);
+  const rig = npcKind
+    ? hasNpcSprite(scene, npcKind) ? createNpcRig(scene, npcKind) : null
+    : hasPlayerSprites(scene) ? createPlayerRig(scene, color) : null;
+  const m = characterMetrics(!!rig);
+  const shadow = scene.add.image(0, PLAYER_RADIUS_PX * 0.9, TEX_SHADOW).setScale(rig ? 1.5 : 1, rig ? 1.2 : 1);
+  const body = rig ? rig.tinted ?? rig.layers[0] : scene.add.image(0, 0, TEX_BODY).setTint(color);
   const label = scene.add
-    .text(0, -PLAYER_RADIUS_PX - LABEL_GAP_PX, name, {
+    .text(0, m.headTop - LABEL_GAP_PX, name, {
       fontFamily: "system-ui, sans-serif",
       fontSize: `${LABEL_FONT_PX}px`,
       fontStyle: "bold",
@@ -172,14 +196,15 @@ export function createPlayerView(
     .setOrigin(0.5, 1)
     .setResolution(Math.max(2, window.devicePixelRatio * 2));
   const bubble = scene.add
-    .circle(0, 0, PLAYER_RADIUS_PX + 6, BUBBLE_COLOR, 0.15)
+    .circle(0, m.bodyCenter, m.bodyRadius, BUBBLE_COLOR, 0.15)
     .setStrokeStyle(2, BUBBLE_COLOR, 0.85)
     .setVisible(false);
   const stars = scene.add
-    .text(0, -PLAYER_RADIUS_PX - LABEL_GAP_PX - LABEL_FONT_PX - 2, "💫 💫", { fontSize: `${LABEL_FONT_PX}px` })
+    .text(0, m.headTop - LABEL_GAP_PX - LABEL_FONT_PX - 2, "💫 💫", { fontSize: `${LABEL_FONT_PX}px` })
     .setOrigin(0.5, 1)
     .setVisible(false);
   scene.tweens.add({ targets: stars, angle: 360, duration: 900, repeat: -1 });
-  const container = scene.add.container(0, 0, [shadow, bubble, body, label, stars]);
-  return { container, body, label, bubble, stars };
+  const art = rig ? rig.layers : [body];
+  const container = scene.add.container(0, 0, [shadow, bubble, ...art, label, stars]);
+  return { container, body, rig, label, bubble, stars };
 }

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { createPlaceholderTextures } from "../render/placeholderSprites";
 import { bakeFloorTextures } from "../render/mapRenderer";
+import { loadCharacterSheets, registerCharacterFrames } from "../render/characterSprites";
 import { hostelMap } from "../../../shared/world";
 import { net } from "../net";
 
@@ -10,7 +11,13 @@ export class BootScene extends Phaser.Scene {
     super("Boot");
   }
 
+  preload(): void {
+    // Character sprite sheets (client/public/sprites). Missing files just mean blobs.
+    loadCharacterSheets(this);
+  }
+
   create(): void {
+    registerCharacterFrames(this);
     createPlaceholderTextures(this);
     bakeFloorTextures(this, hostelMap);
     this.add

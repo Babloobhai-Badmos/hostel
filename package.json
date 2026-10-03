@@ -16,7 +16,8 @@
     "tunnel": "node scripts/tunnel.mjs",
     "sim": "tsx scripts/simClients.ts",
     "map": "tsx scripts/mapPreview.ts",
-    "selftest": "tsx scripts/selftest.ts"
+    "selftest": "tsx scripts/selftest.ts",
+    "sprites": "node scripts/makeSprites.mjs"
   },
   "dependencies": {
     "@colyseus/schema": "^3.0.76",

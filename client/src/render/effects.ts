@@ -102,6 +102,8 @@ export function killEffect(
   color: number,
   finisher: string,
   onLanded: () => void,
+  /** Builds the spinning ragdoll (defaults to the round blob). */
+  makeDoll?: () => Phaser.GameObjects.Container | Phaser.GameObjects.Image,
 ): void {
   const [text, textColor] = FINISHER_TEXT[finisher] ?? FINISHER_TEXT.thwack;
   if (finisher === "strangle") redCloth(scene, x, y, angle);
@@ -112,7 +114,7 @@ export function killEffect(
 
   // Ragdoll: the victim's blob is launched up and sideways (along `angle`),
   // spinning, and comes down where the body will lie.
-  const doll = scene.add.image(x, y, TEX_BODY).setTint(color).setDepth(EFFECT_DEPTH);
+  const doll = (makeDoll ? makeDoll() : scene.add.image(x, y, TEX_BODY).setTint(color)).setPosition(x, y).setDepth(EFFECT_DEPTH);
   const side = { x: Math.cos(angle) * FLING_PX * 0.5, y: Math.sin(angle) * FLING_PX * 0.5 };
   scene.tweens.addCounter({
     from: 0,

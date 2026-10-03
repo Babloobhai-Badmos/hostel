@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hostel sprite sheet: 6 columns x 4 rows of 64x80 frames. See README.md in this folder. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="320" viewBox="0 0 384 320">
+<g id="r0c0" transform="translate(0 0)">
+  <g transform="translate(0 0)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M40 43 L44 42 L44 60 Q42 60.6 40 61 Z" fill="#cfcfcf"/>
+    <path d="M28 40.5 L32 45 L36 40.5" fill="none" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r0c1" transform="translate(64 0)">
+  <g transform="translate(0 0)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M40 43 L44 42 L44 60 Q42 60.6 40 61 Z" fill="#cfcfcf"/>
+    <path d="M28 40.5 L32 45 L36 40.5" fill="none" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r0c2" transform="translate(128 0)">
+  <g transform="translate(0 0)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M40 43 L44 42 L44 60 Q42 60.6 40 61 Z" fill="#cfcfcf"/>
+    <path d="M28 40.5 L32 45 L36 40.5" fill="none" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r0c3" transform="translate(192 0)">
+  <g transform="translate(0 -1.5)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M40 43 L44 42 L44 60 Q42 60.6 40 61 Z" fill="#cfcfcf"/>
+    <path d="M28 40.5 L32 45 L36 40.5" fill="none" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r0c4" transform="translate(256 0)">
+  <g transform="translate(0 0)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M40 43 L44 42 L44 60 Q42 60.6 40 61 Z" fill="#cfcfcf"/>
+    <path d="M28 40.5 L32 45 L36 40.5" fill="none" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r0c5" transform="translate(320 0)">
+  <g transform="translate(0 -1.5)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M40 43 L44 42 L44 60 Q42 60.6 40 61 Z" fill="#cfcfcf"/>
+    <path d="M28 40.5 L32 45 L36 40.5" fill="none" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r1c0" transform="translate(0 80)">
+  <g transform="translate(0 0)">
+    <path d="M23 42 Q32 39 41 42 L41 60 Q32 62 23 60 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M37 42 L41 42 L41 60 L37 60.6 Z" fill="#cfcfcf"/>
+    <path d="M27 42.5 L23.5 51 L29 52.5 L31 45 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r1c1" transform="translate(64 80)">
+  <g transform="translate(0 0)">
+    <path d="M23 42 Q32 39 41 42 L41 60 Q32 62 23 60 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M37 42 L41 42 L41 60 L37 60.6 Z" fill="#cfcfcf"/>
+    <path d="M27 42.5 L23.5 51 L29 52.5 L31 45 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r1c2" transform="translate(128 80)">
+  <g transform="translate(0 0)">
+    <path d="M23 42 Q32 39 41 42 L41 60 Q32 62 23 60 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M37 42 L41 42 L41 60 L37 60.6 Z" fill="#cfcfcf"/>
+    <path d="M27 42.5 L23.5 51 L29 52.5 L31 45 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r1c3" transform="translate(192 80)">
+  <g transform="translate(0 -1.5)">
+    <path d="M23 42 Q32 39 41 42 L41 60 Q32 62 23 60 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M37 42 L41 42 L41 60 L37 60.6 Z" fill="#cfcfcf"/>
+    <path d="M27 42.5 L23.5 51 L29 52.5 L31 45 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r1c4" transform="translate(256 80)">
+  <g transform="translate(0 0)">
+    <path d="M23 42 Q32 39 41 42 L41 60 Q32 62 23 60 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M37 42 L41 42 L41 60 L37 60.6 Z" fill="#cfcfcf"/>
+    <path d="M27 42.5 L23.5 51 L29 52.5 L31 45 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r1c5" transform="translate(320 80)">
+  <g transform="translate(0 -1.5)">
+    <path d="M23 42 Q32 39 41 42 L41 60 Q32 62 23 60 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M37 42 L41 42 L41 60 L37 60.6 Z" fill="#cfcfcf"/>
+    <path d="M27 42.5 L23.5 51 L29 52.5 L31 45 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r2c0" transform="translate(0 160)">
+  <g transform="translate(0 0)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M20 42 L24 42 L24 61 Q22 60.6 20 60 Z" fill="#cfcfcf"/>
+  </g>
+</g>
+<g id="r2c1" transform="translate(64 160)">
+  <g transform="translate(0 0)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M20 42 L24 42 L24 61 Q22 60.6 20 60 Z" fill="#cfcfcf"/>
+  </g>
+</g>
+<g id="r2c2" transform="translate(128 160)">
+  <g transform="translate(0 0)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M20 42 L24 42 L24 61 Q22 60.6 20 60 Z" fill="#cfcfcf"/>
+  </g>
+</g>
+<g id="r2c3" transform="translate(192 160)">
+  <g transform="translate(0 -1.5)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M20 42 L24 42 L24 61 Q22 60.6 20 60 Z" fill="#cfcfcf"/>
+  </g>
+</g>
+<g id="r2c4" transform="translate(256 160)">
+  <g transform="translate(0 0)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M20 42 L24 42 L24 61 Q22 60.6 20 60 Z" fill="#cfcfcf"/>
+  </g>
+</g>
+<g id="r2c5" transform="translate(320 160)">
+  <g transform="translate(0 -1.5)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M20 42 L24 42 L24 61 Q22 60.6 20 60 Z" fill="#cfcfcf"/>
+  </g>
+</g>
+<g id="r3c0" transform="translate(0 240)">
+  <g transform="translate(0 0)">
+    <path d="M20 42 Q32 38 44 42 L51 50 L46 54 L44 51 L44 60 Q32 62 20 60 L20 51 L18 54 L13 50 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M40 43 L44 42 L44 60 Q42 60.6 40 61 Z" fill="#cfcfcf"/>
+    <path d="M28 40.5 L32 45 L36 40.5" fill="none" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</g>
+<g id="r3c1" transform="translate(64 240)"><path d="M20 58 Q22 52 30 52 L42 53 Q45 58 42 66 L30 67 Q22 66 20 58 Z" fill="#ffffff" stroke="#2b1d14" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M30 62 L42 62 L42 66 L30 67 Z" fill="#cfcfcf"/>
+</g>
+</svg>

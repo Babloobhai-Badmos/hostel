@@ -191,6 +191,18 @@ export const KILL_FEED_SECONDS = 6;
 /** After the winning condition is met, the round keeps running this long (so the last kill plays out). */
 export const ROUND_END_DELAY_MS = 2500;
 
+// ---------- Character sprites (client) ----------
+/** World pixels per sprite-sheet pixel: a 64x80 frame is drawn ~51x64 world px (a tile is 32). */
+export const CHARACTER_SPRITE_SCALE = 0.8;
+/** SVG sheets are rasterised at this multiple so they stay sharp when the camera zooms in. */
+export const SPRITE_SVG_RENDER_SCALE = 2;
+/** Walk-cycle frames per second at normal speed. */
+export const WALK_FPS = 8;
+/** Idle characters blink every BLINK_MIN..MAX ms, for BLINK_MS. */
+export const BLINK_MIN_MS = 2200;
+export const BLINK_MAX_MS = 5000;
+export const BLINK_MS = 140;
+
 // ---------- Client view ----------
 /** The camera zooms so roughly this many tiles fit across the screen on any device. */
 export const VIEW_WIDTH_TILES = 22;

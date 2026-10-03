@@ -53,6 +53,7 @@ import { KeyboardControls } from "../input/keyboard";
 import { InterpolationBuffer } from "../render/interpolation";
 import { createFloorView } from "../render/mapRenderer";
 import { createCorpseView, createGujjuView, createPlayerView, createWardenView } from "../render/placeholderSprites";
+import { createRagdollLayers, hasPlayerSprites } from "../render/characterSprites";
 import type { PlayerView } from "../render/placeholderSprites";
 import {
   beatEffect,
@@ -436,7 +437,7 @@ export class GameScene extends Phaser.Scene {
     if (!view) return;
     this.chatBubbles.get(msg.fromId)?.text.destroy();
     const text = this.add
-      .text(0, -PLAYER_RADIUS_PX - 34, msg.text, {
+      .text(0, view.label.y - 16, msg.text, {
         fontFamily: "system-ui, sans-serif",
         fontSize: "11px",
         color: "#000000",
@@ -466,7 +467,10 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const color = PLAYER_COLORS[net.room?.state.players.get(msg.victimId)?.color ?? 0];
-    killEffect(this, msg.x, msg.y, msg.angle, color, msg.finisher, () => this.markLanded(msg.victimId));
+    const doll = hasPlayerSprites(this)
+      ? () => this.add.container(0, 0, createRagdollLayers(this, color))
+      : undefined;
+    killEffect(this, msg.x, msg.y, msg.angle, color, msg.finisher, () => this.markLanded(msg.victimId), doll);
   }
 
   private markLanded(victimId: string): void {
@@ -677,6 +681,7 @@ export class GameScene extends Phaser.Scene {
         .setPosition(this.display.x, this.display.y)
         .setDepth(this.display.y)
         .setAlpha(!me.alive ? GHOST_ALPHA : me.hidden || me.venting ? HIDDEN_SELF_ALPHA : 1);
+      this.localView.rig?.update(this.display.x, this.display.y, me.alive && me.stunned, me.dashing ? DASH_SPEED_MULTIPLIER : 1);
     }
     if (this.localView) {
       this.localView.bubble.setVisible(me.alive && me.safe);
@@ -725,6 +730,7 @@ export class GameScene extends Phaser.Scene {
         r.view.container.setAlpha(!p.connected ? OFFLINE_ALPHA : p.alive ? 1 : GHOST_ALPHA);
         r.view.bubble.setVisible(p.alive && p.safe);
         r.view.stars.setVisible(p.alive && p.stunned);
+        r.view.rig?.update(r.pos.x, r.pos.y, p.alive && p.stunned, p.dashing ? DASH_SPEED_MULTIPLIER : 1);
       } else {
         // Keep the position fresh so attack checks and re-appearing are accurate.
         const sample = r.buffer.sample(now);
@@ -749,6 +755,7 @@ export class GameScene extends Phaser.Scene {
       const sameFloor = n.npc.floor === this.currentFloor;
       const show = sameFloor && canSee(n.pos.x, n.pos.y);
       n.view.container.setVisible(show).setPosition(n.pos.x, n.pos.y).setDepth(n.pos.y);
+      if (show) n.view.rig?.update(n.pos.x, n.pos.y, false);
       n.speech?.setText(GUJJU_SPEECH[n.npc.mood] ?? "");
       if (n.cone) this.drawWardenCone(n.cone, sameFloor, n.pos, n.npc.facing, grid);
     });

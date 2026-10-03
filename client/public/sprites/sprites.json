@@ -1,0 +1,16 @@
+{
+  "_help": [
+    "Sprite sheets for the characters. See README.md in this folder.",
+    "Every sheet uses the same grid: frameWidth x frameHeight frames, columns x rows.",
+    "feetY = the pixel row (inside a frame) where the feet touch the ground. headTopY = top of the head.",
+    "Files can be .svg or .png (PNG must be the sheet size or an exact multiple, e.g. 2x)."
+  ],
+  "frameWidth": 64,
+  "frameHeight": 80,
+  "columns": 6,
+  "rows": 4,
+  "feetY": 76,
+  "headTopY": 6,
+  "player": { "shirt": "player-shirt.svg", "details": "player-details.svg" },
+  "npcs": { "gujju": "gujju.svg", "warden": "warden.svg" }
+}
