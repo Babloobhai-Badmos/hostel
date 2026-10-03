@@ -1,17 +1,27 @@
 // HostelRoom: orchestration only. Game rules live in server/systems/*.
+//
+// Round flow: lobby -> reveal (ROLE_REVEAL_SECONDS, nobody moves) -> playing
+// -> ended (results screen) -> host presses Play Again -> lobby.
 
 import { Client, Room } from "colyseus";
 import {
+  DEBUG_DEFAULT_BOT_FILL,
+  GHOST_SPEED_MULTIPLIER,
   MAX_PLAYERS,
   MIN_PLAYERS_TO_START,
   RECONNECT_SECONDS,
+  ROLE_REVEAL_SECONDS,
+  ROUND_END_DELAY_MS,
   TICK_MS,
 } from "../../shared/constants";
+import { REGULAR } from "../../shared/characters";
 import { useTarget } from "../../shared/interact";
 import { ClientMsg, GamePhase, ServerMsg } from "../../shared/types";
-import type { ErrorMessage, JoinOptions } from "../../shared/types";
+import type { CooldownMessage, ErrorMessage, JoinOptions, ResultsMessage } from "../../shared/types";
 import { hostelMap } from "../../shared/world";
 import { GameState, Player } from "../schema/GameState";
+import { BotSystem } from "../systems/bots";
+import { CombatSystem } from "../systems/combat";
 import { HidingSystem } from "../systems/hiding";
 import {
   ensureHost,
@@ -22,8 +32,13 @@ import {
   uniqueName,
 } from "../systems/lobby";
 import { MovementSystem } from "../systems/movement";
+import type { MoveMode } from "../systems/movement";
+import { RoleSystem } from "../systems/roles";
 import { StairSystem } from "../systems/stairs";
 import { teleport } from "../systems/teleport";
+import { VentSystem } from "../systems/vents";
+import { checkWin } from "../systems/win";
+import type { WinResult } from "../systems/win";
 
 export class HostelRoom extends Room<GameState> {
   override maxClients = MAX_PLAYERS;
@@ -32,6 +47,16 @@ export class HostelRoom extends Room<GameState> {
   private movement!: MovementSystem;
   private stairs!: StairSystem;
   private hiding!: HidingSystem;
+  private roles!: RoleSystem;
+  private combat!: CombatSystem;
+  private vents!: VentSystem;
+  private bots!: BotSystem;
+  /** Debug settings from the host's join options. */
+  private debugBots = DEBUG_DEFAULT_BOT_FILL;
+  private debugRole = "";
+  private lastResults: ResultsMessage | null = null;
+  /** Set once a win is detected; the round ends ROUND_END_DELAY_MS later. */
+  private ending = false;
 
   override onCreate(): void {
     this.setState(new GameState());
@@ -39,24 +64,32 @@ export class HostelRoom extends Room<GameState> {
     this.movement = new MovementSystem(grids);
     this.stairs = new StairSystem(this.map, this.movement);
     this.hiding = new HidingSystem();
+    this.roles = new RoleSystem();
+    this.bots = new BotSystem(this.state, this.movement);
+    this.combat = new CombatSystem(this.state, this.map, this.roles, this.movement, this.hiding, {
+      onKill: (msg) => this.broadcast(ServerMsg.Kill, msg),
+      onSearch: (msg) => this.broadcast(ServerMsg.Search, msg),
+    });
+    this.vents = new VentSystem(this.map, this.roles, this.movement, (msg) => this.broadcast(ServerMsg.VentPop, msg));
 
     this.setPatchRate(TICK_MS);
     this.setSimulationInterval(() => this.tick(), TICK_MS);
 
     this.onMessage(ClientMsg.Input, (client, msg: unknown) => {
-      const player = this.activePlayer(client);
-      if (player) this.movement.enqueue(client.sessionId, msg);
+      if (this.activePlayer(client)) this.movement.enqueue(client.sessionId, msg);
     });
+    this.onMessage(ClientMsg.WhoAmI, (client) => this.sendPrivateInfo(client));
     this.onMessage(ClientMsg.Use, (client) => this.handleUse(client));
+    this.onMessage(ClientMsg.Attack, (client) => this.handleAttack(client));
     this.onMessage(ClientMsg.Start, (client) => this.handleStart(client));
+    this.onMessage(ClientMsg.PlayAgain, (client) => this.handlePlayAgain(client));
 
     // Reserved for later phases. Registered so the server doesn't log warnings.
-    for (const msg of [ClientMsg.Attack, ClientMsg.Ability, ClientMsg.TaskDone]) {
-      this.onMessage(msg, () => {});
-    }
+    for (const msg of [ClientMsg.Ability, ClientMsg.TaskDone]) this.onMessage(msg, () => {});
   }
 
   override onJoin(client: Client, options: Partial<JoinOptions> = {}): void {
+    const first = this.state.players.size === 0;
     const player = new Player();
     player.id = client.sessionId;
     player.name = uniqueName(this.state, sanitizeName(options.name));
@@ -65,9 +98,19 @@ export class HostelRoom extends Room<GameState> {
     player.floor = this.map.spawnFloor;
     player.x = spawn.x;
     player.y = spawn.y;
+    // Joined mid-round: watch as a ghost until the next round.
+    if (this.state.phase !== GamePhase.Lobby) player.alive = false;
     this.state.players.set(client.sessionId, player);
     this.movement.addPlayer(client.sessionId);
     if (!this.state.hostId) this.state.hostId = client.sessionId;
+
+    if (first && options.debug) {
+      this.state.debug = true;
+      const bots = Number(options.bots);
+      if (Number.isInteger(bots) && bots > 0) this.debugBots = Math.min(MAX_PLAYERS, bots);
+      this.debugRole = typeof options.role === "string" ? options.role : "";
+      console.log(`[room] debug room: bots fill to ${this.debugBots}${this.debugRole ? `, host plays ${this.debugRole}` : ""}`);
+    }
     console.log(`[room] ${player.name} joined (${this.state.players.size}/${MAX_PLAYERS})`);
   }
 
@@ -98,38 +141,114 @@ export class HostelRoom extends Room<GameState> {
     this.state.players.delete(client.sessionId);
     this.movement.removePlayer(client.sessionId);
     this.stairs.removePlayer(client.sessionId);
+    this.combat.removePlayer(client.sessionId);
+    this.vents.removePlayer(client.sessionId);
     ensureHost(this.state);
     console.log(`[room] ${player.name} left (${this.state.players.size}/${MAX_PLAYERS})`);
   }
 
   override onDispose(): void {
+    this.vents.reset();
     console.log("[room] disposed");
   }
 
+  // ---------- Tick ----------
+
   private tick(): void {
-    this.state.players.forEach((player) => {
-      if (player.connected) this.movement.tick(player, !player.hidden);
+    const playing = this.state.phase === GamePhase.Playing;
+    const now = Date.now();
+    if (playing) this.bots.tick();
+    this.state.players.forEach((p) => {
+      if (!p.connected) return;
+      this.movement.tick(p, this.moveModeOf(p, playing), this.speedOf(p));
     });
+    if (!playing) return;
+    this.combat.tick(now);
+    if (this.ending) return;
+    const win = checkWin(this.state, this.roles);
+    if (win) {
+      this.ending = true;
+      this.clock.setTimeout(() => this.endRound(checkWin(this.state, this.roles) ?? win), ROUND_END_DELAY_MS);
+    }
   }
 
-  /** The player for a client, if they're connected and allowed to act. */
+  private moveModeOf(p: Player, playing: boolean): MoveMode {
+    if (this.state.phase === GamePhase.Reveal || this.state.phase === GamePhase.Ended) return "frozen";
+    if (!p.alive) return "ghost";
+    if (!playing) return "walk"; // lobby
+    if (p.hidden || p.venting) return "frozen";
+    return "walk";
+  }
+
+  private speedOf(p: Player): number {
+    if (!p.alive) return GHOST_SPEED_MULTIPLIER;
+    return (this.roles.get(p.id) ?? REGULAR).speed;
+  }
+
+  // ---------- Messages ----------
+
+  /** The player for a client, if they're connected. */
   private activePlayer(client: Client): Player | null {
     const player = this.state.players.get(client.sessionId);
     return player && player.connected ? player : null;
   }
 
+  private sendPrivateInfo(client: Client): void {
+    if (this.state.phase !== GamePhase.Lobby) {
+      client.send(ServerMsg.Role, this.roles.messageFor(client.sessionId, (id) => this.nameOf(id)));
+      this.sendCooldowns(client);
+    }
+    if (this.state.phase === GamePhase.Ended && this.lastResults) client.send(ServerMsg.Results, this.lastResults);
+  }
+
+  private sendCooldowns(client: Client): void {
+    const id = client.sessionId;
+    const now = Date.now();
+    const msg: CooldownMessage = {
+      attack: this.combat.attackReadyIn(id, now),
+      vent: this.vents.readyIn(id, now),
+      search: this.combat.searchReadyIn(id, now),
+      protection: this.combat.protectionLeft(id, now),
+    };
+    client.send(ServerMsg.Cooldowns, msg);
+  }
+
+  private handleAttack(client: Client): void {
+    const player = this.activePlayer(client);
+    if (!player || this.state.phase !== GamePhase.Playing) return;
+    this.combat.tryAttack(player, Date.now());
+    this.sendCooldowns(client);
+  }
+
   /** USE is context-sensitive; the server works out the target itself from the player's position. */
   private handleUse(client: Client): void {
     const player = this.activePlayer(client);
-    if (!player) return;
-    const target = useTarget(this.map, player);
+    if (!player || player.venting) return;
+    const playing = this.state.phase === GamePhase.Playing;
+    const c = this.roles.get(player.id);
+    const target = useTarget(this.map, {
+      floor: player.floor,
+      x: player.x,
+      y: player.y,
+      hidden: player.hidden,
+      alive: player.alive,
+      isKiller: playing && c?.role === "killer",
+      canVent: playing && !!c?.canVent,
+    });
     if (!target) return;
+    const now = Date.now();
     switch (target.kind) {
       case "unhide":
         this.hiding.exit(player);
         break;
       case "stairs":
         this.stairs.use(player, target.stair);
+        break;
+      case "vent":
+        this.vents.use(player, target.vent, now);
+        break;
+      case "search":
+        this.combat.trySearch(player, target.spot, now);
         break;
       case "hide":
         if (this.hiding.enter(player, target.spot) === "occupied") {
@@ -139,6 +258,7 @@ export class HostelRoom extends Room<GameState> {
         }
         break;
     }
+    this.sendCooldowns(client);
   }
 
   private handleStart(client: Client): void {
@@ -146,21 +266,96 @@ export class HostelRoom extends Room<GameState> {
       return this.sendError(client, "Only the host can start the game.");
     }
     if (this.state.phase !== GamePhase.Lobby) return;
-    if (this.connectedCount() < MIN_PLAYERS_TO_START) {
-      return this.sendError(client, `Need at least ${MIN_PLAYERS_TO_START} players to start.`);
+    const humans = this.connectedCount();
+    if (this.state.debug) {
+      while (this.state.players.size < this.debugBots) {
+        this.bots.add(this.map.spawns[0], this.map.spawnFloor, pickColor(this.state));
+      }
+    } else if (humans < MIN_PLAYERS_TO_START) {
+      return this.sendError(
+        client,
+        `Need at least ${MIN_PLAYERS_TO_START} players to start (add ?debug=1 to the host's URL to fill with bots).`,
+      );
     }
+
+    const ids = [...this.state.players.keys()];
+    const forced = this.state.debug && this.debugRole ? { id: this.state.hostId, characterId: this.debugRole } : undefined;
+    this.roles.assign(ids, forced);
     this.hiding.reset(this.state.players.values());
+    this.vents.reset();
+    this.state.bodies.clear();
+    this.lastResults = null;
     for (const [p, s] of spawnAssignments(this.state, this.map.spawns)) {
+      p.alive = true;
+      p.venting = false;
       teleport(p, this.map.spawnFloor, s.x, s.y, this.movement);
     }
-    this.state.phase = GamePhase.Playing;
-    console.log(`[room] game started with ${this.connectedCount()} players`);
+    this.ending = false;
+    this.state.phase = GamePhase.Reveal;
+    for (const c of this.clients) this.sendPrivateInfo(c);
+    console.log(
+      `[room] round starting with ${ids.length} players: ` +
+        ids.map((id) => `${this.nameOf(id)}=${this.roles.get(id)?.id}`).join(", ") +
+        (this.roles.npcs.length ? ` + NPC ${this.roles.npcs.map((n) => n.id).join(", ")}` : ""),
+    );
+
+    this.clock.setTimeout(() => {
+      if (this.state.phase !== GamePhase.Reveal) return;
+      this.state.phase = GamePhase.Playing;
+      this.combat.startRound(Date.now());
+      for (const c of this.clients) this.sendCooldowns(c);
+    }, ROLE_REVEAL_SECONDS * 1000);
+  }
+
+  private endRound(win: WinResult): void {
+    if (this.state.phase !== GamePhase.Playing) return;
+    this.ending = false;
+    this.state.phase = GamePhase.Ended;
+    this.vents.reset();
+    const players = this.roles.ids().flatMap((id) => {
+      const p = this.state.players.get(id);
+      const c = this.roles.get(id);
+      if (!p || !c) return [];
+      return [{
+        name: p.name,
+        character: c.name,
+        role: c.role,
+        alive: p.alive,
+        kills: this.combat.killsOf(id),
+        bot: this.bots.isBot(id),
+      }];
+    });
+    this.lastResults = { winner: win.winner, reason: win.reason, players };
+    this.broadcast(ServerMsg.Results, this.lastResults);
+    console.log(`[room] round over: ${win.winner} win. ${win.reason}`);
+  }
+
+  private handlePlayAgain(client: Client): void {
+    if (client.sessionId !== this.state.hostId || this.state.phase !== GamePhase.Ended) return;
+    this.bots.removeAll();
+    this.roles.clear();
+    this.hiding.reset(this.state.players.values());
+    this.state.bodies.clear();
+    this.lastResults = null;
+    for (const [p, s] of spawnAssignments(this.state, this.map.spawns)) {
+      p.alive = true;
+      p.safe = false;
+      p.venting = false;
+      teleport(p, this.map.spawnFloor, s.x, s.y, this.movement);
+    }
+    this.state.phase = GamePhase.Lobby;
+  }
+
+  // ---------- Helpers ----------
+
+  private nameOf(id: string): string {
+    return this.state.players.get(id)?.name ?? "?";
   }
 
   private connectedCount(): number {
     let n = 0;
     this.state.players.forEach((p) => {
-      if (p.connected) n++;
+      if (p.connected && !this.bots.isBot(p.id)) n++;
     });
     return n;
   }

@@ -2,7 +2,7 @@
 
 A chaotic multiplayer top-down browser game for 1–20 friends on the same WiFi or hotspot. One laptop runs the server; everyone else opens a URL in their phone or laptop browser. Nothing to install on the phones.
 
-**Current status: Phase 2 (the map).** Lobby with name entry and a host START button, then two hostel floors generated from `shared/layout.json`: rooms, corridors, doors, furniture, ~100 hiding spots, stairs between floors, vents and task stations (vents and tasks become usable in later phases).
+**Current status: Phase 3 (roles and combat).** Lobby, two generated hostel floors, secret roles with a reveal screen, killers with melee attacks, bodies, ghosts, vision with line of sight, vents, hiding spots that killers can search, and a results screen. Tasks, abilities and chaos events come in later phases.
 
 ## Requirements
 
@@ -64,11 +64,43 @@ It prints an `https://<random-words>.trycloudflare.com` URL. Send that to everyo
 | | Phone | Laptop |
 | --- | --- | --- |
 | Move | Left thumb anywhere on the left half (floating joystick) | WASD / arrow keys |
-| Use (stairs, hide, climb out) | USE button (lights up and relabels when something is in reach) | E |
+| Use (stairs, hide, climb out, vent, search) | USE button (lights up and relabels when something is in reach) | E |
+| Attack (killers) | ATTACK button (lights up when someone is in reach) | Space |
 | Look at the other floor's map | Tap the minimap | M |
 
 - **Stairs:** walk onto the yellow-striped stairs and press USE to go to the matching stairs on the other floor. You only see players on your own floor.
-- **Hiding spots:** anything with a **dotted yellow outline** (cupboards, lockers, under beds, curtains, behind water tanks, between bookshelves...). Stand next to it and press USE. While hidden, nobody else can see you and you can't move. USE again to climb out. One person per spot.
+- **Hiding spots:** anything with a **dotted yellow outline** (cupboards, lockers, under beds, curtains, behind water tanks, between bookshelves...). Stand next to it and press USE. While hidden, nobody else can see you and you can't move. USE again to climb out. One person per spot. Killers can't hit you in there, but they can **SEARCH** a spot (10 s cooldown): if you're inside, you're dragged out and killed.
+
+## Roles
+
+Everyone gets a secret character at the start of each round, shown on a 4-second reveal screen. Killers also see who the other killers are. Characters are data in `shared/characters.json`.
+
+| Players | Killers | Also |
+| --- | --- | --- |
+| 15–20 | Arch-Semen, Kallu Koli, Mota-dalla, Laal Jhanda | Supreme Leader, Gujju Rapper (NPC in room 303) |
+| 10–14 | 3 of those 4, at random | Supreme Leader, Gujju Rapper (NPC) |
+| 5–9 | 2 of those 4, at random | Supreme Leader |
+
+Everyone else is a regular Hosteller. Killers all look exactly like everyone else.
+
+- **Killing:** killers press ATTACK to hit the closest player in front of them within their range, then wait out their cooldown (15 s). Killers can't hurt each other. Nobody can be killed in the first 5 seconds (spawn protection, shown as a blue bubble).
+- **Bodies** stay where they fell for the whole round.
+- **Ghosts:** dead players float through walls, see everything, and are invisible to the living.
+- **Vision:** the living see 6 tiles around them; killers see half that. Walls and solid furniture block sight.
+- **Vents:** killers can jump into a grate and pop out of the paired one, maybe on the other floor (8 s cooldown).
+- **Winning:** crew wins when every killer is dead or has left. Killers win when everyone else is dead, or killers are at least as many as everyone else alive. Phase 4 adds crew winning by finishing tasks.
+
+## Testing alone (debug mode)
+
+A round needs 5 players. To test with fewer, the **host** opens the game with `?debug=1` and START fills the room with wandering bots:
+
+```
+http://localhost:3000/?debug=1                       # fill up to 5 players with bots
+http://localhost:3000/?debug=1&bots=12               # fill up to 12
+http://localhost:3000/?debug=1&role=arch-semen       # and make the host Arch-Semen
+```
+
+`role` takes any id from `shared/characters.json` (`arch-semen`, `kallu-koli`, `mota-dalla`, `laal-jhanda`, `supreme-leader`, `regular`). Debug options only count when the first person to join the room uses them.
 
 ## The map
 
@@ -88,11 +120,12 @@ Everything comes from `shared/layout.json` (rooms, doors, stairs, vents, spawn, 
 1. Run `npm start` on the laptop. Note the LAN URL.
 2. On the laptop, open `http://localhost:3000`, type a name and press **Join**. You're the host (👑).
 3. On your phone, open the LAN URL (for example `http://192.168.1.42:3000`), turn it sideways, type a name and tap **Join**. Both devices now list both players.
-4. On the laptop, press **START**. Everyone appears in the Floor 2 Washroom.
-5. Walk around (see Controls above). Each device should see the other moving smoothly. The yellow name is you.
-6. Walk out of the Washroom's north door, go left along the North Corridor and up into **Stair W**. Press USE: you're now on Floor 3, and the other device no longer sees you.
-7. Stand next to a locker (dotted yellow outline) and press USE to hide.
-8. Reconnect test: lock the phone or reload the page, then come back within 30 seconds. You get your slot back (other players see you as "(offline)" in the meantime).
+4. With fewer than 5 people, open the laptop page as `http://localhost:3000/?debug=1&role=arch-semen` **before** anyone else joins (see Testing alone).
+5. On the laptop, press **START**. Each device shows its role for 4 seconds, then everyone is in the Floor 2 Washroom.
+6. Walk around. You only see what's in your vision circle. The yellow name is you.
+7. As the killer (laptop): after the 5-second spawn protection, walk up to the phone player, face them and press Space. THWACK. The phone becomes a ghost and a body stays on the floor.
+8. Try hiding in a locker on the phone, then search it from the laptop with E.
+9. Reconnect test: lock the phone or reload the page, then come back within 30 seconds. You get your slot (and role) back.
 
 The first tap on a phone puts the page into fullscreen landscape on Android. **iPhones don't support the fullscreen API**. For a full-screen experience there, tap *Share → Add to Home Screen* and open the game from the new icon.
 
@@ -116,6 +149,7 @@ It prints server update rate (should stay ~20/s) and the worst gap between updat
 | `npm run build` | Build the client into `dist/client` |
 | `npm run typecheck` | TypeScript strict check of everything |
 | `npm run map` | Validate `layout.json` and print both floors as ASCII |
+| `npm run selftest` | With the server running: scripted round that checks hiding, searching, vents, spawn protection, ghosts and speed limits |
 | `npm run tunnel` | Print tunnel fallback instructions |
 | `npm run sim -- [count] [seconds] [url]` | Headless bot load test |
 

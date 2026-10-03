@@ -30,6 +30,10 @@ export class HidingSystem {
     player.hidden = false;
   }
 
+  occupantOf(spotId: string): string | undefined {
+    return this.occupant.get(spotId);
+  }
+
   /** Empty every spot (round start). */
   reset(players: Iterable<Player>): void {
     for (const p of players) p.hidden = false;

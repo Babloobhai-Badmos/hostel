@@ -2,7 +2,18 @@
 
 import { Client, Room, getStateCallbacks } from "colyseus.js";
 import { RECONNECT_SECONDS, ROOM_NAME } from "../../shared/constants";
-import type { JoinOptions } from "../../shared/types";
+import { ClientMsg, ServerMsg } from "../../shared/types";
+import type {
+  CooldownMessage,
+  JoinOptions,
+  KillMessage,
+  ResultsMessage,
+  RoleMessage,
+  SearchMessage,
+  VentPopMessage,
+} from "../../shared/types";
+import { character } from "../../shared/characters";
+import type { CharacterDef } from "../../shared/characters";
 import type { GameState } from "../../server/schema/GameState";
 
 const TOKEN_KEY = "hostel.reconnectionToken";
@@ -20,12 +31,60 @@ export type GameRoom = Room<GameState>;
 
 type Listener = () => void;
 
+/** One-shot world events from the server, for effects and the kill feed. */
+export interface NetEvents {
+  kill: KillMessage;
+  ventPop: VentPopMessage;
+  search: SearchMessage;
+  results: ResultsMessage;
+  error: string;
+}
+type EventHandler<K extends keyof NetEvents> = (msg: NetEvents[K]) => void;
+
+/** Debug options from the page URL: ?debug=1&bots=8&role=arch-semen */
+function debugOptionsFromUrl(): Partial<JoinOptions> {
+  const q = new URLSearchParams(location.search);
+  if (q.get("debug") !== "1") return {};
+  const bots = Number(q.get("bots"));
+  return {
+    debug: true,
+    ...(Number.isInteger(bots) && bots > 0 ? { bots } : {}),
+    ...(q.get("role") ? { role: q.get("role")! } : {}),
+  };
+}
+
 class Net {
   room: GameRoom | null = null;
   /** True while we're trying to get back into the room after a drop. */
   reconnecting = false;
+  /** My character this round (null in the lobby / before the server tells us). */
+  role: RoleMessage | null = null;
+  /** performance.now() timestamps when each action is ready again. */
+  readyAt = { attack: 0, vent: 0, search: 0, protection: 0 };
+  results: ResultsMessage | null = null;
   private roomListeners = new Set<Listener>();
   private statusListeners = new Set<Listener>();
+  private eventHandlers = new Map<keyof NetEvents, Set<(msg: never) => void>>();
+
+  get character(): CharacterDef | undefined {
+    return this.role && !this.role.spectator ? character(this.role.characterId) : undefined;
+  }
+
+  get isKiller(): boolean {
+    return this.character?.role === "killer";
+  }
+
+  /** Subscribe to a server event; returns an unsubscribe function. */
+  on<K extends keyof NetEvents>(type: K, fn: EventHandler<K>): () => void {
+    let set = this.eventHandlers.get(type);
+    if (!set) this.eventHandlers.set(type, (set = new Set()));
+    set.add(fn as (msg: never) => void);
+    return () => set!.delete(fn as (msg: never) => void);
+  }
+
+  private emit<K extends keyof NetEvents>(type: K, msg: NetEvents[K]): void {
+    this.eventHandlers.get(type)?.forEach((fn) => (fn as EventHandler<K>)(msg));
+  }
 
   get sessionId(): string {
     return this.room?.sessionId ?? "";
@@ -49,7 +108,7 @@ class Net {
 
   async join(name: string): Promise<GameRoom> {
     safeSet(localStorage, NAME_KEY, name);
-    const options: JoinOptions = { name };
+    const options: JoinOptions = { name, ...debugOptionsFromUrl() };
     const room = await client.joinOrCreate<GameState>(ROOM_NAME, options);
     this.attach(room);
     return room;
@@ -76,6 +135,35 @@ class Net {
   private attach(room: GameRoom): void {
     this.room = room;
     safeSet(sessionStorage, TOKEN_KEY, room.reconnectionToken);
+    room.onMessage(ServerMsg.Role, (msg: RoleMessage) => {
+      this.role = msg;
+      this.statusListeners.forEach((fn) => fn());
+    });
+    room.onMessage(ServerMsg.Cooldowns, (msg: CooldownMessage) => {
+      const now = performance.now();
+      this.readyAt = {
+        attack: now + msg.attack,
+        vent: now + msg.vent,
+        search: now + msg.search,
+        protection: now + msg.protection,
+      };
+    });
+    room.onMessage(ServerMsg.Kill, (msg: KillMessage) => this.emit("kill", msg));
+    room.onMessage(ServerMsg.VentPop, (msg: VentPopMessage) => this.emit("ventPop", msg));
+    room.onMessage(ServerMsg.Search, (msg: SearchMessage) => this.emit("search", msg));
+    room.onMessage(ServerMsg.Error, (msg: { message: string }) => this.emit("error", msg.message));
+    room.onMessage(ServerMsg.Results, (msg: ResultsMessage) => {
+      this.results = msg;
+      this.emit("results", msg);
+    });
+    // Back in the lobby: forget last round's role and results.
+    getStateCallbacks(room)(room.state).listen("phase", (phase) => {
+      if (phase === "lobby") {
+        this.role = null;
+        this.results = null;
+      }
+    });
+    room.send(ClientMsg.WhoAmI);
     room.onLeave((code) => {
       if (this.room !== room) return;
       if (code === CLOSE_CONSENTED) {

@@ -4,11 +4,11 @@
 // spot growing lag. Example: npm run sim -- 20 300
 //
 // The first simulated client is the host if the room is empty, and it starts
-// the round so the bots move in the game phase.
+// the round once all bots are in (needs at least MIN_PLAYERS_TO_START).
 
 import { Client } from "colyseus.js";
 import { INPUT_SEND_MS, ROOM_NAME, SERVER_PORT } from "../shared/constants";
-import { ClientMsg } from "../shared/types";
+import { ClientMsg, ServerMsg } from "../shared/types";
 import type { InputMessage } from "../shared/types";
 
 const count = Number(process.argv[2] ?? 10);
@@ -24,9 +24,11 @@ interface Stats {
   lastPatch: number;
 }
 
-async function runBot(i: number, stats: Stats): Promise<() => Promise<void>> {
+async function runBot(i: number, stats: Stats): Promise<{ stop: () => Promise<void>; start: () => void }> {
   const client = new Client(url);
   const room = await client.joinOrCreate(ROOM_NAME, { name: `Bot ${i + 1}` });
+  // Bots ignore game events, but register them so the client doesn't warn.
+  for (const type of Object.values(ServerMsg)) room.onMessage(type, () => {});
   let seq = 0;
   let angle = Math.random() * Math.PI * 2;
   room.onStateChange(() => {
@@ -42,19 +44,23 @@ async function runBot(i: number, stats: Stats): Promise<() => Promise<void>> {
     const input: InputMessage = { dx: Math.cos(angle), dy: Math.sin(angle), seq: ++seq };
     room.send(ClientMsg.Input, input);
   }, INPUT_SEND_MS);
-  if (i === 0) setTimeout(() => room.send(ClientMsg.Start), 500);
-  return async () => {
-    clearInterval(timer);
-    await room.leave();
+  return {
+    start: () => room.send(ClientMsg.Start),
+    stop: async () => {
+      clearInterval(timer);
+      await room.leave();
+    },
   };
 }
 
 async function main(): Promise<void> {
   console.log(`Connecting ${count} bots to ${url} for ${seconds}s…`);
   const stats: Stats = { patches: 0, maxGapMs: 0, lastPatch: 0 };
-  const stops: (() => Promise<void>)[] = [];
-  for (let i = 0; i < count; i++) stops.push(await runBot(i, stats));
+  const bots: Awaited<ReturnType<typeof runBot>>[] = [];
+  for (let i = 0; i < count; i++) bots.push(await runBot(i, stats));
   console.log(`${count} bots connected.`);
+  // The first bot is the host: start the round once everyone is in.
+  bots[0].start();
 
   const started = Date.now();
   const report = setInterval(() => {
@@ -70,7 +76,7 @@ async function main(): Promise<void> {
 
   await new Promise((r) => setTimeout(r, seconds * 1000));
   clearInterval(report);
-  await Promise.all(stops.map((s) => s()));
+  await Promise.all(bots.map((b) => b.stop()));
   console.log("Done.");
   process.exit(0);
 }

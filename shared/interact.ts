@@ -1,19 +1,27 @@
 // What the USE button would do right now. The client calls this to label and
 // enable the button; the server calls the same code to validate the request.
+//
+// Priority: climb out > stairs > vent (killers) > hiding spot.
+// Near a hiding spot, crew HIDE and killers SEARCH. Ghosts can only use stairs.
 
-import { HIDE_RANGE_TILES, TILE_SIZE } from "./constants";
-import type { FloorMap, HideSpot, HostelMap, Stair } from "./buildMap";
+import { HIDE_RANGE_TILES, TILE_SIZE, VENT_RANGE_TILES } from "./constants";
+import type { FloorMap, HideSpot, HostelMap, Stair, Vent } from "./buildMap";
 
 export type UseTarget =
   | { kind: "unhide" }
   | { kind: "stairs"; stair: Stair }
-  | { kind: "hide"; spot: HideSpot };
+  | { kind: "vent"; vent: Vent }
+  | { kind: "hide"; spot: HideSpot }
+  | { kind: "search"; spot: HideSpot };
 
 export interface Actor {
   floor: number;
   x: number;
   y: number;
   hidden: boolean;
+  alive: boolean;
+  isKiller: boolean;
+  canVent: boolean;
 }
 
 /** The stairs whose zone contains this point, if any. */
@@ -24,19 +32,27 @@ export function stairAt(floor: FloorMap, x: number, y: number): Stair | null {
   return null;
 }
 
-/** The closest hiding spot within reach, if any. */
-export function hideSpotNear(floor: FloorMap, x: number, y: number): HideSpot | null {
-  const range = HIDE_RANGE_TILES * TILE_SIZE;
-  let best: HideSpot | null = null;
+function nearest<T extends { x: number; y: number }>(items: T[], x: number, y: number, rangeTiles: number): T | null {
+  const range = rangeTiles * TILE_SIZE;
+  let best: T | null = null;
   let bestD = range * range;
-  for (const h of floor.hides) {
-    const d = (h.x - x) ** 2 + (h.y - y) ** 2;
+  for (const it of items) {
+    const d = (it.x - x) ** 2 + (it.y - y) ** 2;
     if (d <= bestD) {
       bestD = d;
-      best = h;
+      best = it;
     }
   }
   return best;
+}
+
+/** The closest hiding spot within reach, if any. */
+export function hideSpotNear(floor: FloorMap, x: number, y: number): HideSpot | null {
+  return nearest(floor.hides, x, y, HIDE_RANGE_TILES);
+}
+
+export function ventNear(floor: FloorMap, x: number, y: number): Vent | null {
+  return nearest(floor.vents, x, y, VENT_RANGE_TILES);
 }
 
 export function useTarget(map: HostelMap, actor: Actor): UseTarget | null {
@@ -45,7 +61,12 @@ export function useTarget(map: HostelMap, actor: Actor): UseTarget | null {
   if (!floor) return null;
   const stair = stairAt(floor, actor.x, actor.y);
   if (stair) return { kind: "stairs", stair };
+  if (!actor.alive) return null;
+  if (actor.canVent) {
+    const vent = ventNear(floor, actor.x, actor.y);
+    if (vent) return { kind: "vent", vent };
+  }
   const spot = hideSpotNear(floor, actor.x, actor.y);
-  if (spot) return { kind: "hide", spot };
+  if (spot) return actor.isKiller ? { kind: "search", spot } : { kind: "hide", spot };
   return null;
 }

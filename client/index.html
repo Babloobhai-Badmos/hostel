@@ -164,6 +164,54 @@
         display: none !important;
       }
 
+      /* ---------- Results overlay ---------- */
+      #results {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: #000000b0;
+        z-index: 11;
+      }
+      #results.show {
+        display: flex;
+      }
+      #results h1.killers {
+        color: #ff4d4d;
+      }
+      #results h1.crew {
+        color: #9be564;
+      }
+      #results-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 15px;
+      }
+      #results-table th,
+      #results-table td {
+        text-align: left;
+        padding: 5px 6px;
+        border-bottom: 1px solid #3a3150;
+      }
+      #results-table td.killer {
+        color: #ff4d4d;
+        font-weight: 700;
+      }
+      #results-table td.savior {
+        color: #7fdbff;
+        font-weight: 700;
+      }
+      #results-table tr.dead td {
+        opacity: 0.55;
+      }
+      #again-btn {
+        width: 100%;
+        margin-top: 14px;
+        font-size: 22px;
+      }
+
       /* ---------- Rotate prompt for phones held in portrait ---------- */
       #rotate {
         position: absolute;
@@ -225,6 +273,21 @@
         </div>
 
         <div id="lobby-error"></div>
+      </div>
+    </div>
+
+    <div id="results">
+      <div class="card">
+        <h1 id="results-title"></h1>
+        <p class="tag" id="results-reason"></p>
+        <table id="results-table">
+          <thead>
+            <tr><th>Player</th><th>Was</th><th>Status</th><th>Kills</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button id="again-btn" class="hidden">PLAY AGAIN</button>
+        <div id="results-wait" class="tag">Waiting for the host…</div>
       </div>
     </div>
 

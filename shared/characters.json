@@ -5,10 +5,12 @@
     "role": "killer",
     "speed": 1.2,
     "attackRange": 1.0,
-    "attackCooldown": 2.0,
+    "attackCooldown": 15,
     "canVent": true,
     "ability": "dash",
-    "abilityCooldown": 12
+    "abilityCooldown": 12,
+    "finisher": "thwack",
+    "blurb": "Fast and sneaky. Dash in, THWACK, dash out."
   },
   {
     "id": "kallu-koli",
@@ -19,7 +21,9 @@
     "attackCooldown": 15,
     "canVent": true,
     "ability": "wide-swing",
-    "abilityCooldown": 15
+    "abilityCooldown": 15,
+    "finisher": "bonk",
+    "blurb": "Slow, long reach. One big swing and they're flat."
   },
   {
     "id": "mota-dalla",
@@ -29,7 +33,12 @@
     "attackRange": 1.5,
     "attackCooldown": 15,
     "canVent": true,
-    "ability": "poisonous-smell"
+    "ability": "poisonous-smell",
+    "abilityCooldown": 20,
+    "gasRadius": 1.5,
+    "gasSeconds": 4,
+    "finisher": "splat",
+    "blurb": "Slowest in the hostel. His gas kills anyone who walks into it. Killers are immune."
   },
   {
     "id": "laal-jhanda",
@@ -40,7 +49,8 @@
     "attackCooldown": 15,
     "canVent": true,
     "ability": "red-cloth",
-    "finisher": "throws a red cloth around the victim's neck and strangles them"
+    "finisher": "strangle",
+    "blurb": "Throws his red cloth around your neck and pulls tight."
   },
   {
     "id": "gujju-rapper",
@@ -54,7 +64,8 @@
     "abilityCooldown": 20,
     "stunRadius": 4,
     "stunSeconds": 3,
-    "finisher": "butt-crush: twerks, then drops onto the stunned victim and sits on their face until they stop moving"
+    "finisher": "butt-crush",
+    "blurb": "Lives in 303. Drops a beat, everyone freezes, then he sits on you until you stop moving."
   },
   {
     "id": "supreme-leader",
@@ -66,6 +77,15 @@
     "shield": true,
     "shieldSeconds": 5,
     "shieldCooldown": 30,
-    "reviveHoldSeconds": 3
+    "reviveHoldSeconds": 3,
+    "blurb": "Can't kill. Can bring one body back to life per round, and shield people."
+  },
+  {
+    "id": "regular",
+    "name": "Hosteller",
+    "role": "regular",
+    "speed": 1.0,
+    "canVent": false,
+    "blurb": "Do your tasks. Don't die. Trust nobody."
   }
 ]

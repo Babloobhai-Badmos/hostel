@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "tunnel": "node scripts/tunnel.mjs",
     "sim": "tsx scripts/simClients.ts",
-    "map": "tsx scripts/mapPreview.ts"
+    "map": "tsx scripts/mapPreview.ts",
+    "selftest": "tsx scripts/selftest.ts"
   },
   "dependencies": {
     "@colyseus/schema": "^3.0.76",

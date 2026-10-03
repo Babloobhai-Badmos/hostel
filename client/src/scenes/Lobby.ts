@@ -3,8 +3,7 @@
 
 import Phaser from "phaser";
 import { MAX_PLAYERS, MIN_PLAYERS_TO_START, NAME_MAX_LENGTH, PLAYER_COLORS } from "../../../shared/constants";
-import { ClientMsg, ServerMsg } from "../../../shared/types";
-import type { ErrorMessage } from "../../../shared/types";
+import { ClientMsg } from "../../../shared/types";
 import { net } from "../net";
 
 const $id = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -98,10 +97,12 @@ export class LobbyScene extends Phaser.Scene {
       $(room.state).listen("hostId", render),
       net.onStatus(render),
     );
-    const offError = room.onMessage(ServerMsg.Error, (msg: ErrorMessage) => {
-      $id<HTMLDivElement>("lobby-error").textContent = msg.message;
-    });
-    this.cleanups.push(offError);
+    this.cleanups.push(
+      net.on("error", (message) => {
+        $id<HTMLDivElement>("lobby-error").textContent = message;
+      }),
+      $(room.state).listen("debug", render),
+    );
     render();
   }
 
@@ -129,7 +130,7 @@ export class LobbyScene extends Phaser.Scene {
     });
 
     const isHost = room.state.hostId === room.sessionId;
-    const enough = connected >= MIN_PLAYERS_TO_START;
+    const enough = room.state.debug || connected >= MIN_PLAYERS_TO_START;
     startBtn.classList.toggle("hidden", !isHost);
     startBtn.disabled = !enough;
     startBtn.textContent = enough ? "START" : `Need ${MIN_PLAYERS_TO_START} players`;
@@ -137,7 +138,8 @@ export class LobbyScene extends Phaser.Scene {
     if (net.reconnecting) status.textContent = "Connection lost. Reconnecting…";
     else {
       const who = isHost ? "You're the host. Press START when everyone's in." : "Waiting for the host to start…";
-      status.textContent = `${connected}/${MAX_PLAYERS} in the hostel. ${who}`;
+      const debug = room.state.debug ? " DEBUG ROOM: bots fill the empty slots." : "";
+      status.textContent = `${connected}/${MAX_PLAYERS} in the hostel. ${who}${debug}`;
     }
   }
 }

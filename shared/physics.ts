@@ -64,3 +64,52 @@ export function stepMovement(
   if (stepY !== 0 && !circleHitsWall(grid, x, y + stepY, radius)) y += stepY;
   return { x, y };
 }
+
+/** Ghost movement: no walls, just stay inside the floor. */
+export function stepGhost(grid: CollisionGrid, pos: Vec2, dir: Vec2, speed: number, dt: number, radius: number): Vec2 {
+  const maxX = grid.width * grid.tileSize - radius;
+  const maxY = grid.height * grid.tileSize - radius;
+  return {
+    x: Math.min(maxX, Math.max(radius, pos.x + dir.x * speed * dt)),
+    y: Math.min(maxY, Math.max(radius, pos.y + dir.y * speed * dt)),
+  };
+}
+
+/**
+ * Distance from (x, y) along `angle` to the first solid tile, capped at
+ * maxDist. Grid DDA: visits exactly the tiles the ray crosses.
+ */
+export function castRay(grid: CollisionGrid, x: number, y: number, angle: number, maxDist: number): number {
+  const ts = grid.tileSize;
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  let tx = Math.floor(x / ts);
+  let ty = Math.floor(y / ts);
+  const stepX = dx > 0 ? 1 : -1;
+  const stepY = dy > 0 ? 1 : -1;
+  const tDeltaX = dx !== 0 ? Math.abs(ts / dx) : Infinity;
+  const tDeltaY = dy !== 0 ? Math.abs(ts / dy) : Infinity;
+  let tMaxX = dx > 0 ? ((tx + 1) * ts - x) / dx : dx < 0 ? (tx * ts - x) / dx : Infinity;
+  let tMaxY = dy > 0 ? ((ty + 1) * ts - y) / dy : dy < 0 ? (ty * ts - y) / dy : Infinity;
+  for (;;) {
+    let t: number;
+    if (tMaxX < tMaxY) {
+      t = tMaxX;
+      tMaxX += tDeltaX;
+      tx += stepX;
+    } else {
+      t = tMaxY;
+      tMaxY += tDeltaY;
+      ty += stepY;
+    }
+    if (t >= maxDist) return maxDist;
+    if (isSolidTile(grid, tx, ty)) return t;
+  }
+}
+
+/** True if nothing solid lies on the straight line between two points. */
+export function hasLineOfSight(grid: CollisionGrid, x0: number, y0: number, x1: number, y1: number): boolean {
+  const dist = Math.hypot(x1 - x0, y1 - y0);
+  if (dist < 1) return true;
+  return castRay(grid, x0, y0, Math.atan2(y1 - y0, x1 - x0), dist) >= dist;
+}

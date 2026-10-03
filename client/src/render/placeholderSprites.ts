@@ -7,6 +7,15 @@ import { PLAYER_RADIUS_PX } from "../../../shared/constants";
 
 export const TEX_BODY = "body";
 export const TEX_SHADOW = "shadow";
+export const TEX_CORPSE = "corpse";
+export const TEX_CORPSE_DETAIL = "corpse-detail";
+export const TEX_BLOOD = "blood";
+export const TEX_SPARK = "spark";
+
+const SKIN = 0xf2b48c;
+const SKIN_DARK = 0xc98a66;
+const BLOOD = 0xb0001a;
+const BLOOD_DARK = 0x6e0010;
 
 /** Outline thickness of the body circle, in pixels. */
 const OUTLINE_PX = 3;
@@ -31,7 +40,68 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
   g.fillStyle(0x000000, 0.35);
   g.fillEllipse(centre, centre, size, size * 0.45);
   g.generateTexture(TEX_SHADOW, size, size);
+  g.clear();
+
+  // Corpse: the body squashed flat (white, takes the player's tint).
+  const cw = size * 1.5;
+  const ch = size * 0.75;
+  g.fillStyle(0x000000, 1);
+  g.fillEllipse(cw / 2, ch / 2, cw, ch);
+  g.fillStyle(0xffffff, 1);
+  g.fillEllipse(cw / 2, ch / 2, cw - OUTLINE_PX * 2, ch - OUTLINE_PX * 2);
+  g.generateTexture(TEX_CORPSE, cw, ch);
+  g.clear();
+
+  // Corpse details (not tinted): X-eyes on the left end, and the bare bum
+  // sticking up on the right end, pants gone.
+  const dh = ch * 1.6;
+  const by = dh * 0.42;
+  g.lineStyle(3, 0x000000, 1);
+  const ex = cw * 0.22;
+  const ey = dh - ch / 2 - 2;
+  for (const off of [-5, 5]) {
+    g.lineBetween(ex + off - 3, ey - 3, ex + off + 3, ey + 3);
+    g.lineBetween(ex + off - 3, ey + 3, ex + off + 3, ey - 3);
+  }
+  g.fillStyle(0x000000, 1);
+  g.fillCircle(cw * 0.66, by, 9);
+  g.fillCircle(cw * 0.8, by, 9);
+  g.fillStyle(SKIN, 1);
+  g.fillCircle(cw * 0.66, by, 7.5);
+  g.fillCircle(cw * 0.8, by, 7.5);
+  g.lineStyle(2, SKIN_DARK, 1);
+  g.lineBetween(cw * 0.73, by - 6, cw * 0.73, by + 6);
+  g.fillStyle(0xffffff, 0.7);
+  g.fillCircle(cw * 0.63, by - 3, 2);
+  g.generateTexture(TEX_CORPSE_DETAIL, cw, dh);
+  g.clear();
+
+  // Blood pool: a few overlapping blobs and drips.
+  const bs = size * 2.2;
+  g.fillStyle(BLOOD_DARK, 0.9);
+  g.fillEllipse(bs / 2, bs / 2, bs * 0.9, bs * 0.55);
+  g.fillStyle(BLOOD, 0.95);
+  g.fillEllipse(bs / 2 - 4, bs / 2 - 2, bs * 0.75, bs * 0.45);
+  for (const [dx, dy, r] of [[-0.42, -0.2, 4], [0.4, 0.15, 5], [0.3, -0.28, 3], [-0.3, 0.26, 3.5], [0.46, -0.05, 2.5]]) {
+    g.fillCircle(bs / 2 + dx * bs, bs / 2 + dy * bs, r);
+  }
+  g.generateTexture(TEX_BLOOD, bs, bs);
+  g.clear();
+
+  // Spark for the star burst.
+  g.fillStyle(0xffffff, 1);
+  g.fillTriangle(0, 6, 16, 4, 16, 8);
+  g.fillTriangle(16, 4, 32, 6, 16, 8);
+  g.generateTexture(TEX_SPARK, 32, 12);
   g.destroy();
+}
+
+/** A body on the floor: blood pool, flattened tinted body, X-eyes and bare bum. */
+export function createCorpseView(scene: Phaser.Scene, color: number): Phaser.GameObjects.Container {
+  const blood = scene.add.image(0, 2, TEX_BLOOD).setAngle(Phaser.Math.Between(0, 359));
+  const flat = scene.add.image(0, 0, TEX_CORPSE).setTint(color);
+  const detail = scene.add.image(0, -PLAYER_RADIUS_PX * 0.45, TEX_CORPSE_DETAIL);
+  return scene.add.container(0, 0, [blood, flat, detail]);
 }
 
 export interface PlayerView {
